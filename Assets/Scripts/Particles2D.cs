@@ -387,6 +387,10 @@ public class Particles2D : MonoBehaviour
         meshRenderer.SetPropertyBlock(mpb);
     }
 
+    // Public read-only accessors for other renderers (e.g., Poly2D)
+    public ComputeBuffer PositionsBuffer => positionsBuffer;
+    public int ParticleCount => particleCount;
+
     void OnDrawGizmos()
     {
         if (!showGizmos) return;

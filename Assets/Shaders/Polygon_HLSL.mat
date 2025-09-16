@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Particles_HLSL
-  m_Shader: {fileID: 4800000, guid: 49f1df7b9ea4d7447a720567c270fb5a, type: 3}
+  m_Name: Polygon_HLSL
+  m_Shader: {fileID: 4800000, guid: 0dbe8f0d18e652b48b5b929042d315c7, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
@@ -29,5 +29,4 @@ Material:
     - _SoftEdge: 0.75
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
-    - _RadiusUV: {r: 0.01, g: 0.01, b: 0, a: 0}
   m_BuildTextureStacks: []

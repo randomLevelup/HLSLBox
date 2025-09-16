@@ -8,8 +8,8 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: PoorlinBG_HLSL
-  m_Shader: {fileID: 4800000, guid: 5806adbf8f2b109468d30c9815a6ef59, type: 3}
-  m_Parent: {fileID: 0}
+  m_Shader: {fileID: 4800000, guid: 789acf4420195004aa5cf662268de191, type: 3}
+  m_Parent: {fileID: 2100000, guid: 0f1ead9920a77c9468313e37e6be2910, type: 2}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords: []
   m_InvalidKeywords: []
@@ -24,6 +24,10 @@ Material:
     serializedVersion: 3
     m_TexEnvs: []
     m_Ints: []
-    m_Floats: []
+    m_Floats:
+    - _Distort: 0.0812
+    - _Scale: 1.18
+    - _Speed: 0.19
+    - _Vignette: 0.738
     m_Colors: []
   m_BuildTextureStacks: []
