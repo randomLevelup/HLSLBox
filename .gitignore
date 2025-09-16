@@ -1,0 +1,9 @@
+# Unity stuff
+Library/
+Logs/
+Temp/
+UserSettings/
+
+# VS
+*.code-workspace
+.vscode/
