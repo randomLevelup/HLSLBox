@@ -24,6 +24,9 @@ public class Poly2D : MonoBehaviour
 	MaterialPropertyBlock mpb;
 	MeshRenderer mr;
 
+	// Runtime behavior
+	bool seeded; // ensure we only auto-seed once per play session
+
 	const int STRIDE_INT = sizeof(int);
 
 	void Awake()
@@ -63,6 +66,28 @@ public class Poly2D : MonoBehaviour
 
 	void Update()
 	{
+		// Attempt auto-find particles at runtime if missing
+		if (Application.isPlaying && particles == null)
+		{
+			TryFindParticles();
+		}
+
+		// Auto-seed with 3 random unique points on first run
+		if (Application.isPlaying && !seeded)
+		{
+			TryAutoSeed();
+		}
+
+		// Add a new random point on Space key
+		if (Application.isPlaying && Input.GetKeyDown(KeyCode.Space))
+		{
+			if (AddRandomIndex())
+			{
+				EnsureBuffer();
+				Upload();
+			}
+		}
+
 		// In case indices change at runtime or particles existance changes
 		Upload();
 		UpdateMaterial();
@@ -152,6 +177,64 @@ public class Poly2D : MonoBehaviour
 		{
 			if (indices[i] < 0) indices[i] = 0;
 		}
+	}
+
+	void TryFindParticles()
+	{
+		// Lightweight scene search; only in play mode to avoid editor-time changes
+		if (!Application.isPlaying) return;
+		var found = FindObjectOfType<Particles2D>();
+		if (found != null) particles = found;
+	}
+
+	void TryAutoSeed()
+	{
+		if (seeded) return;
+		if (particles == null) return;
+		int count = Mathf.Max(0, particles.ParticleCount);
+		if (count <= 0) return;
+
+		// If user has already provided indices, respect them; otherwise seed up to 3 unique
+		if (indices == null) indices = new List<int>();
+		if (indices.Count < 3)
+		{
+			int target = Mathf.Min(3, count);
+			// Build a set of used indices
+			var used = new HashSet<int>(indices);
+			int safety = 0;
+			while (indices.Count < target && safety < 100)
+			{
+				int r = UnityEngine.Random.Range(0, count);
+				if (used.Add(r)) indices.Add(r);
+				safety++;
+			}
+			EnsureBuffer();
+			Upload();
+		}
+		seeded = true;
+	}
+
+	bool AddRandomIndex()
+	{
+		if (particles == null) return false;
+		int count = Mathf.Max(0, particles.ParticleCount);
+		if (count <= 0) return false;
+		if (indices == null) indices = new List<int>();
+
+		// Keep indices unique; if full, do nothing
+		if (indices.Count >= count) return false;
+		var used = new HashSet<int>(indices);
+		int safety = 0;
+		while (safety++ < 200)
+		{
+			int r = UnityEngine.Random.Range(0, count);
+			if (used.Add(r))
+			{
+				indices.Add(r);
+				return true;
+			}
+		}
+		return false;
 	}
 
 	// Public API
