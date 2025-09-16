@@ -231,7 +231,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &1416965096
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -297,7 +297,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &2021437254
+--- !u!1 &1952376252
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -305,10 +305,10 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 2021437258}
-  - component: {fileID: 2021437257}
-  - component: {fileID: 2021437256}
-  - component: {fileID: 2021437255}
+  - component: {fileID: 1952376256}
+  - component: {fileID: 1952376255}
+  - component: {fileID: 1952376254}
+  - component: {fileID: 1952376253}
   m_Layer: 0
   m_Name: Particles
   m_TagString: Untagged
@@ -316,13 +316,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!23 &2021437255
+--- !u!23 &1952376253
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2021437254}
+  m_GameObject: {fileID: 1952376252}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 0
@@ -358,21 +358,21 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &2021437256
+--- !u!33 &1952376254
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2021437254}
+  m_GameObject: {fileID: 1952376252}
   m_Mesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
---- !u!114 &2021437257
+--- !u!114 &1952376255
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2021437254}
+  m_GameObject: {fileID: 1952376252}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 5c465cc1a5c95af4fa7a241305388f63, type: 3}
@@ -381,25 +381,29 @@ MonoBehaviour:
   particleCount: 30
   spawnArea: {x: 10, y: 10}
   particleMass: 1
-  repulsionStrength: 2.25
+  repulsionStrength: 3.38
   minDistance: 0.1
   dragPerSecond: 2.61
   maxForce: 1000
   maxVelocity: 10
   gravity: 30
+  noiseModulatesRepulsion: 1
+  noiseScale: 13.75
+  noiseSpeed: 41.2
+  noiseInfluence: 0.179
   bounds: {x: 10, y: 10}
   wrapEdges: 0
   showGizmos: 0
   gizmoRadius: 0.05
   particleRadius: 0.04
   edgeSoftness: 0.762
---- !u!4 &2021437258
+--- !u!4 &1952376256
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2021437254}
+  m_GameObject: {fileID: 1952376252}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: -1}
@@ -414,4 +418,4 @@ SceneRoots:
   m_Roots:
   - {fileID: 519420032}
   - {fileID: 1416965098}
-  - {fileID: 2021437258}
+  - {fileID: 1952376256}

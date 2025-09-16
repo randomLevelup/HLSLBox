@@ -1,40 +1,44 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// TODO
-/// </summary>
 public class Particles2D : MonoBehaviour
 {
     [Header("Spawn")]
-    [SerializeField, Range(1, 20000)] int particleCount = 200;
+    [SerializeField, Range(1, 200)] int particleCount = 10;
     [SerializeField] Vector2 spawnArea = new Vector2(10f, 10f);
 
     [Header("Dynamics")]
     [SerializeField] float particleMass = 1f;
-    [SerializeField, Tooltip("Coulomb-ish constant. Larger -> stronger repulsion")] float repulsionStrength = 100f;
+    [SerializeField, Tooltip("Coulomb-ish constant. Larger -> stronger repulsion")] float repulsionStrength = 5f;
     [SerializeField, Tooltip("Softening min distance to avoid singularities")] float minDistance = 0.1f;
-    [SerializeField, Tooltip("Linear drag per second (0 = no drag)")] float dragPerSecond = 0.5f;
+    [SerializeField, Tooltip("Linear drag per second (0 = no drag)")] float dragPerSecond = 2.5f;
     [SerializeField, Tooltip("Clamp force magnitude to prevent explosions")] float maxForce = 1000f;
     [SerializeField] float maxVelocity = 10f;
 
     [Header("Attraction")]
     [SerializeField, Tooltip("Acceleration towards center (units/s^2). 0 = off")] float gravity = 30f;
 
+    [Header("Noise Repulsion (matches shader)")]
+    [SerializeField, Tooltip("When enabled, each particle's repulsion strength is modulated by 2D value noise at its position.")] bool noiseModulatesRepulsion = true;
+    [SerializeField, Tooltip("Noise tiling scale (like _Scale in shader). Higher = smaller features."), Min(0.0001f)] float noiseScale = 20f;
+    [SerializeField, Tooltip("Noise speed over time (like _Speed in shader)." )] float noiseSpeed = 40f;
+    [SerializeField, Tooltip("Blend between no modulation (0) and fully driven by noise (1)."), Range(0f, 1f)] float noiseInfluence = 0.175f;
+
     [Header("Bounds & display")]
     [SerializeField] Vector2 bounds = new Vector2(10f, 10f);
     [SerializeField] bool wrapEdges = false;
-    [SerializeField] bool showGizmos = true;
+    [SerializeField] bool showGizmos = false;
     [SerializeField] float gizmoRadius = 0.05f;
 
     [Header("Render Settings")]
-    [SerializeField] float particleRadius = 0.15f;
-    [SerializeField, Tooltip("Soft edge as fraction of radius [0..1]")] [Range(0f, 1f)] float edgeSoftness = 0.35f;
+    [SerializeField] float particleRadius = 0.04f;
+    [SerializeField, Tooltip("Soft edge as fraction of radius [0..1]")] [Range(0f, 1f)] float edgeSoftness = 0.75f;
 
     // Simulation state (local XY space centered at transform)
     Vector2[] positions;
     Vector2[] velocities;
     Vector2[] positionsUV; // cached normalized 0..1 for shader
+    float[] noiseFactors;   // per-particle multiplier from CPU noise [~0..1], blended by influence
 
     // Rendering
     ComputeBuffer positionsBuffer; // float2 per particle
@@ -89,6 +93,8 @@ public class Particles2D : MonoBehaviour
         minDistance = Mathf.Max(0.0001f, minDistance);
         maxForce = Mathf.Max(0.0001f, maxForce);
         maxVelocity = Mathf.Max(0.0001f, maxVelocity);
+        noiseScale = Mathf.Max(0.0001f, noiseScale);
+        noiseInfluence = Mathf.Clamp01(noiseInfluence);
 
         // Reinitialize when values change in editor for immediate feedback
         if (Application.isPlaying)
@@ -108,6 +114,7 @@ public class Particles2D : MonoBehaviour
         positions = new Vector2[particleCount];
         velocities = new Vector2[particleCount];
         positionsUV = new Vector2[particleCount];
+        noiseFactors = new float[particleCount];
 
         var halfSpawn = spawnArea * 0.5f;
         for (int i = 0; i < particleCount; i++)
@@ -177,6 +184,26 @@ public class Particles2D : MonoBehaviour
         EnsureTempForces();
         for (int i = 0; i < particleCount; i++) tmpForces[i] = Vector2.zero;
 
+        // Precompute per-particle noise modulation factors
+        EnsureNoiseFactors();
+        if (noiseModulatesRepulsion)
+        {
+            float w = Time.time * noiseSpeed;         // shader uses _Time.y * _Speed
+            float wScaled = w / 100.0f;               // match valueNoise2D usage (w/100)
+            for (int i = 0; i < particleCount; i++)
+            {
+                // positionsUV already in 0..1, like mesh UV used in shader
+                Vector2 st = positionsUV[i] * noiseScale;
+                float n = ValueNoise2D(st, wScaled);  // ~[0..1]
+                // Blend between 1 (no modulation) and n (full modulation)
+                noiseFactors[i] = Mathf.Lerp(1f, n, noiseInfluence);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < particleCount; i++) noiseFactors[i] = 1f;
+        }
+
         // Pairwise repulsion (naive O(n^2))
         for (int i = 0; i < particleCount; i++)
         {
@@ -191,7 +218,9 @@ public class Particles2D : MonoBehaviour
                 // direction
                 Vector2 dir = d * invDist; // normalized
                 // Coulomb-like repulsion: k / r^2
-                float fmag = repulsionStrength * invDist2; // per unit mass, becoming acceleration when divided by mass
+                // Modulate strength by per-particle noise at both ends (symmetric interaction)
+                float pairMod = noiseFactors[i] * noiseFactors[j];
+                float fmag = repulsionStrength * pairMod * invDist2; // per unit mass, becoming acceleration when divided by mass
                 Vector2 f = dir * fmag;
                 tmpForces[i] -= f;
                 tmpForces[j] += f;
@@ -281,6 +310,48 @@ public class Particles2D : MonoBehaviour
         {
             tmpForces = new Vector2[particleCount];
         }
+    }
+
+    void EnsureNoiseFactors()
+    {
+        if (noiseFactors == null || noiseFactors.Length != particleCount)
+        {
+            noiseFactors = new float[particleCount];
+        }
+    }
+
+    // --- CPU-side noise to mirror Assets/Shaders/PoorlinBG.shader ---
+    // frac(x) helper
+    static float Frac(float x) => x - Mathf.Floor(x);
+
+    // Hash for integer lattice points: frac(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123 + w)
+    static float Hash21(Vector2 p, float w)
+    {
+        // use integer lattice by flooring p
+        p = new Vector2(Mathf.Floor(p.x), Mathf.Floor(p.y));
+        float dotv = p.x * 127.1f + p.y * 311.7f;
+        float s = Mathf.Sin(dotv);
+        float v = s * 43758.5453123f + w;
+        return Frac(v);
+    }
+
+    // 2D value noise with smooth bilinear interpolation matching shader
+    static float ValueNoise2D(Vector2 st, float w)
+    {
+        Vector2 i = new Vector2(Mathf.Floor(st.x), Mathf.Floor(st.y));
+        Vector2 f = new Vector2(Frac(st.x), Frac(st.y));
+
+        float a = Hash21(i, w);
+        float b = Hash21(i + new Vector2(1f, 0f), w);
+        float c = Hash21(i + new Vector2(0f, 1f), w);
+        float d = Hash21(i + new Vector2(1f, 1f), w);
+
+        // Smoothstep-like curve u = f*f*(3-2f)
+        Vector2 u = new Vector2(f.x * f.x * (3f - 2f * f.x), f.y * f.y * (3f - 2f * f.y));
+
+        float nx0 = Mathf.Lerp(a, b, u.x);
+        float nx1 = Mathf.Lerp(c, d, u.x);
+        return Mathf.Lerp(nx0, nx1, u.y);
     }
 
     void NormalizePositionsToUV()
