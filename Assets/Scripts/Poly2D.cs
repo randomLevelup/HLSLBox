@@ -240,51 +240,7 @@ public class Poly2D : MonoBehaviour
 			return;
 		}
 
-		// Find up to 3 closest to UV center (0.5, 0.5)
-		Vector2 center = new Vector2(0.5f, 0.5f);
-		int k = Mathf.Min(3, count);
-		// Top-k selection by distance squared
-		float d0 = float.PositiveInfinity, d1 = float.PositiveInfinity, d2 = float.PositiveInfinity;
-		int i0 = -1, i1 = -1, i2 = -1;
-		for (int i = 0; i < count; i++)
-		{
-			Vector2 p = uvReadback[i];
-			float dx = p.x - center.x; float dy = p.y - center.y;
-			float d = dx * dx + dy * dy;
-			if (d < d0)
-			{
-				d2 = d1; i2 = i1;
-				d1 = d0; i1 = i0;
-				d0 = d;  i0 = i;
-			}
-			else if (d < d1)
-			{
-				d2 = d1; i2 = i1;
-				d1 = d;  i1 = i;
-			}
-			else if (d < d2)
-			{
-				d2 = d;  i2 = i;
-			}
-		}
-
-		// Build ordered indices by angle around center for visual stability
-		List<int> newIdx = new List<int>(k);
-		if (k >= 1 && i0 >= 0) newIdx.Add(i0);
-		if (k >= 2 && i1 >= 0) newIdx.Add(i1);
-		if (k >= 3 && i2 >= 0) newIdx.Add(i2);
-
-		if (newIdx.Count > 1)
-		{
-			newIdx.Sort((a, b) =>
-			{
-				Vector2 pa = uvReadback[a] - center;
-				Vector2 pb = uvReadback[b] - center;
-				float aa = Mathf.Atan2(pa.y, pa.x);
-				float ab = Mathf.Atan2(pb.y, pb.x);
-				return aa.CompareTo(ab);
-			});
-		}
+		var newIdx = QuickHullHelper(uvReadback, count);
 
 		// If unchanged, skip updates
 		bool changed = indices == null || indices.Count != newIdx.Count;
