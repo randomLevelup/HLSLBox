@@ -8,11 +8,11 @@ using UnityEngine;
 public class Poly2D : MonoBehaviour
 {
 	[Header("Source Particles")]
-	[SerializeField] Particles2D particles;
+	[SerializeField] protected Particles2D particles;
 
 	[Header("Polygon Indices (subset, ordered)")]
 	[Tooltip("Ordered list of indices into the Particles2D list. Can be open or closed based on 'Closed Polygon'.")]
-	[SerializeField] List<int> indices = new List<int>();
+	[SerializeField] protected List<int> indices = new List<int>();
 
 	[Header("Line Style")]
 	[SerializeField, Min(0f)] float lineWidth = 0.01f; // in UV units (fraction of bounds)
@@ -20,15 +20,18 @@ public class Poly2D : MonoBehaviour
 	[SerializeField] Color color = Color.white;
 	[SerializeField] bool closed = true;
 
+	[Header("Behavior")]
+	[SerializeField] protected bool autoSeed = false; // default off for base class
+
 	// GPU
-	ComputeBuffer indicesBuffer; // int per vertex index
-	MaterialPropertyBlock mpb;
-	MeshRenderer mr;
+	protected ComputeBuffer indicesBuffer; // int per vertex index
+	protected MaterialPropertyBlock mpb;
+	protected MeshRenderer mr;
 
 	// Runtime behavior
-	bool seeded; // ensure we only auto-seed once per play session
+	protected bool seeded; // ensure we only auto-seed once per play session
 	Coroutine closestUpdater; // periodic updater for closest points
-	Vector2[] uvReadback; // reuse buffer for GPU->CPU readback
+	protected Vector2[] uvReadback; // reuse buffer for GPU->CPU readback
 
 	const int STRIDE_INT = sizeof(int);
 
@@ -87,8 +90,8 @@ public class Poly2D : MonoBehaviour
 			TryFindParticles();
 		}
 
-		// Auto-seed with 3 random unique points on first run
-		if (Application.isPlaying && !seeded)
+		// Optional auto-seed
+		if (Application.isPlaying && autoSeed && !seeded)
 		{
 			TryAutoSeed();
 		}
@@ -123,145 +126,9 @@ public class Poly2D : MonoBehaviour
 		}
 	}
 
-	List<int> QuickHull(int pm, int pM, List<int> indices, Vector2[] positions)
-	{
-		// Base case: no points left
-		if (indices.Count == 0) return new List<int>();
-		
-		// Filter points to only those on the correct side of line pm->pM
-		Vector2 pos_pm = positions[pm];
-		Vector2 pos_pM = positions[pM];
-		indices = indices.FindAll(p =>
-		{
-			if (p == pm || p == pM) return false;
-			float cross = (pos_pM.x - pos_pm.x) * (positions[p].y - pos_pm.y) -
-			              (pos_pM.y - pos_pm.y) * (positions[p].x - pos_pm.x);
-			return cross > 0f;
-		});
-		if (indices.Count == 0) return new List<int>();
-		
-		// Sort by distance from line pm->pM
-		indices.Sort((i, j) =>
-		{
-			// cross product magnitude = twice the signed area => distance from line
-			float d1 = Mathf.Abs((pos_pM.x - pos_pm.x) * (positions[i].y - pos_pm.y) -
-								 (pos_pM.y - pos_pm.y) * (positions[i].x - pos_pm.x));
-			float d2 = Mathf.Abs((pos_pM.x - pos_pm.x) * (positions[j].y - pos_pm.y) -
-								 (pos_pM.y - pos_pm.y) * (positions[j].x - pos_pm.x));
-			// descending: farthest first
-			return d2.CompareTo(d1);
-		});
+	protected virtual void UpdateShape() { }
 
-		// Farthest point from line pm->pM
-		int pi = indices[0];
-		Vector2 pos_pi = positions[pi];
-
-		// Derive two subsets of points:
-		// - setA: points strictly right of segment pm->pi
-		// - setB: points strictly right of segment pi->pM
-		var setA = new List<int>();
-		var setB = new List<int>();
-		for (int k = 1; k < indices.Count; k++)
-		{
-			int p = indices[k];
-			if (p == pm || p == pM || p == pi) continue;
-
-			// cross = (pi - pm) x (p - pm)
-			float crossA = (pos_pi.x - pos_pm.x) * (positions[p].y - pos_pm.y)
-			             - (pos_pi.y - pos_pm.y) * (positions[p].x - pos_pm.x);
-			if (crossA > 0f)
-			{
-				setA.Add(p);
-				continue;
-			}
-			// cross = (pM - pi) x (p - pi)
-			float crossB = (pos_pM.x - pos_pi.x) * (positions[p].y - pos_pi.y)
-			             - (pos_pM.y - pos_pi.y) * (positions[p].x - pos_pi.x);
-			if (crossB > 0f)
-			{
-				setB.Add(p);
-			}
-			// else: discard
-		}
-
-		// Recursively find hull points between the endpoints (do NOT include pm/pM here)
-		var hull = new List<int>();
-		hull.AddRange(QuickHull(pm, pi, setA, positions)); // points between pm and pi
-		hull.Add(pi); // include the pivot between the two halves
-		hull.AddRange(QuickHull(pi, pM, setB, positions)); // points between pi and pM
-
-		return hull;
-	}
-
-	List<int> QuickHullHelper(Vector2[] positions, int count)
-	{
-		var hull = new List<int>();
-		if (count < 3) return hull; // Need at least 3 points for a hull
-		for (int i = 0; i < count; i++) hull.Add(i);
-
-		// sort by x coordinate (leftmost -> rightmost)
-		hull.Sort((i, j) => positions[i].x.CompareTo(positions[j].x));
-
-		int pm = hull[0];
-		int pM = hull[hull.Count - 1];
-
-		var upperHull = QuickHull(pm, pM, hull, positions);
-		upperHull.Insert(0, pm);
-		upperHull.Add(pM);
-
-		var lowerHull = QuickHull(pM, pm, hull, positions);
-
-		hull = upperHull;
-		hull.AddRange(lowerHull);
-		return hull;
-	}
-
-	void UpdateShape()
-	{
-		if (particles == null) return;
-		var posBuffer = particles.PositionsBuffer;
-		int count = Mathf.Max(0, particles.ParticleCount);
-		if (posBuffer == null || count <= 0) return;
-
-		// Ensure readback buffer
-		if (uvReadback == null || uvReadback.Length != count)
-		{
-			uvReadback = new Vector2[count];
-		}
-
-		// Read back UV positions [0..1]
-		try
-		{
-			posBuffer.GetData(uvReadback);
-		}
-		catch (Exception)
-		{
-			// If readback fails (e.g., buffer disposed), skip this tick
-			return;
-		}
-
-		var newIdx = QuickHullHelper(uvReadback, count);
-
-		// If unchanged, skip updates
-		bool changed = indices == null || indices.Count != newIdx.Count;
-		if (!changed && indices != null)
-		{
-			for (int i = 0; i < newIdx.Count; i++)
-			{
-				if (indices[i] != newIdx[i]) { changed = true; break; }
-			}
-		}
-
-		if (changed)
-		{
-			indices = newIdx;
-			EnsureBuffer();
-			Upload();
-			UpdateMaterial();
-		}
-	}
-
-	void EnsureBuffer()
+	protected void EnsureBuffer()
 	{
 		int count = Mathf.Max(1, indices.Count);
 		if (indicesBuffer != null && indicesBuffer.count != count)
@@ -274,7 +141,7 @@ public class Poly2D : MonoBehaviour
 		}
 	}
 
-	void Release()
+	protected void Release()
 	{
 		if (indicesBuffer != null)
 		{
@@ -283,7 +150,7 @@ public class Poly2D : MonoBehaviour
 		}
 	}
 
-	void Upload()
+	protected void Upload()
 	{
 		if (indicesBuffer == null) return;
 		if (indices == null) indices = new List<int>();
@@ -308,7 +175,7 @@ public class Poly2D : MonoBehaviour
 		indicesBuffer.SetData(data);
 	}
 
-	void UpdateMaterial()
+	protected void UpdateMaterial()
 	{
 		if (mr == null) mr = GetComponent<MeshRenderer>();
 		if (mr == null) return;
@@ -337,7 +204,7 @@ public class Poly2D : MonoBehaviour
 		mr.SetPropertyBlock(mpb);
 	}
 
-	void TrimIndices()
+	protected void TrimIndices()
 	{
 		if (indices == null) return;
 		// Remove negatives
@@ -347,7 +214,7 @@ public class Poly2D : MonoBehaviour
 		}
 	}
 
-	void TryFindParticles()
+	protected void TryFindParticles()
 	{
 		// Lightweight scene search; only in play mode to avoid editor-time changes
 		if (!Application.isPlaying) return;
@@ -355,7 +222,7 @@ public class Poly2D : MonoBehaviour
 		if (found != null) particles = found;
 	}
 
-	void TryAutoSeed()
+	protected void TryAutoSeed()
 	{
 		if (seeded) return;
 		if (particles == null) return;
@@ -378,6 +245,7 @@ public class Poly2D : MonoBehaviour
 			}
 			EnsureBuffer();
 			Upload();
+			UpdateMaterial();
 		}
 		seeded = true;
 	}

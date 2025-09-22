@@ -223,7 +223,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1331357614}
-  - component: {fileID: 1331357613}
+  - component: {fileID: 1331357616}
+  - component: {fileID: 1331357615}
   - component: {fileID: 1331357612}
   - component: {fileID: 1331357611}
   m_Layer: 0
@@ -283,24 +284,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1331357610}
   m_Mesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
---- !u!114 &1331357613
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1331357610}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 57a0ed716f39c2049bdbc27c7cf904b9, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  particles: {fileID: 1439737876}
-  indices: 01000000
-  lineWidth: 1.64
-  edgeSoftness: 0.794
-  color: {r: 1, g: 1, b: 1, a: 1}
-  closed: 1
 --- !u!4 &1331357614
 Transform:
   m_ObjectHideFlags: 0
@@ -316,6 +299,44 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1331357615
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1331357610}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a17596310cc8c0348afe8c9d74554e9b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  particles: {fileID: 1439737876}
+  indices: 
+  lineWidth: 1.29
+  edgeSoftness: 0.75
+  color: {r: 1, g: 1, b: 1, a: 1}
+  closed: 1
+  autoSeed: 1
+--- !u!114 &1331357616
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1331357610}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 57a0ed716f39c2049bdbc27c7cf904b9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  particles: {fileID: 1439737876}
+  indices: 010000000200000003000000040000000a000000
+  lineWidth: 1.42
+  edgeSoftness: 0.75
+  color: {r: 1, g: 1, b: 1, a: 1}
+  closed: 1
+  autoSeed: 0
 --- !u!1 &1416965095
 GameObject:
   m_ObjectHideFlags: 0
