@@ -391,6 +391,21 @@ public class Particles2D : MonoBehaviour
     public ComputeBuffer PositionsBuffer => positionsBuffer;
     public int ParticleCount => particleCount;
 
+    // Apply a small velocity impulse specified in UV units; internally converted to local XY.
+    public void AddVelocityImpulseUV(int index, Vector2 impulseUV)
+    {
+        if (index < 0 || index >= particleCount) return;
+        // Convert UV delta to local space delta using bounds scaling (see NormalizePositionsToUV)
+        Vector2 dv = new Vector2(impulseUV.x * bounds.x, impulseUV.y * bounds.y);
+        velocities[index] += dv;
+        // Optional: clamp to max velocity to avoid spikes
+        float vmag = velocities[index].magnitude;
+        if (vmag > maxVelocity)
+        {
+            velocities[index] = velocities[index] / vmag * maxVelocity;
+        }
+    }
+
     void OnDrawGizmos()
     {
         if (!showGizmos) return;

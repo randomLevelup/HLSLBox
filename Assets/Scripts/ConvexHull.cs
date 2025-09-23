@@ -12,8 +12,8 @@ public class ConvexHull : Poly2D
 		autoSeed = true;
 	}
 
-	// QuickHull implementation moved here
-	List<int> QuickHull(int pm, int pM, List<int> candidates, Vector2[] positions)
+	// QuickHull implementation (made protected static so subclasses/utilities can reuse)
+	protected static List<int> QuickHull(int pm, int pM, List<int> candidates, Vector2[] positions)
 	{
 		if (candidates.Count == 0) return new List<int>();
 
@@ -71,7 +71,7 @@ public class ConvexHull : Poly2D
 		return hull;
 	}
 
-	List<int> QuickHullHelper(Vector2[] positions, int count)
+	public static List<int> QuickHullHelper(Vector2[] positions, int count)
 	{
 		var hull = new List<int>();
 		if (count < 3) return hull;

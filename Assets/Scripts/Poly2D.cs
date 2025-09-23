@@ -18,10 +18,14 @@ public class Poly2D : MonoBehaviour
 	[SerializeField, Min(0f)] float lineWidth = 0.01f; // in UV units (fraction of bounds)
 	[SerializeField, Range(0f, 1f)] float edgeSoftness = 0.75f;
 	[SerializeField] Color color = Color.white;
-	[SerializeField] bool closed = true;
+	[SerializeField] protected bool closed = true;
 
 	[Header("Behavior")]
 	[SerializeField] protected bool autoSeed = false; // default off for base class
+    
+	[Header("Vertex Display")]
+	[SerializeField, Tooltip("Toggle drawing discs at polygon vertices in the polygon shader")] bool showVertices = false;
+	[SerializeField, Min(0f), Tooltip("Vertex radius in UV units (use ~0.005–0.02)")] float vertexRadiusUV = 0.01f;
 
 	// GPU
 	protected ComputeBuffer indicesBuffer; // int per vertex index
@@ -44,7 +48,7 @@ public class Poly2D : MonoBehaviour
 		UpdateMaterial();
 	}
 
-	void OnEnable()
+	protected virtual void OnEnable()
 	{
 		// Ensure dependencies are ready in both play mode and edit mode (ExecuteAlways)
 		if (mr == null) mr = GetComponent<MeshRenderer>();
@@ -72,6 +76,7 @@ public class Poly2D : MonoBehaviour
 	void OnValidate()
 	{
 		lineWidth = Mathf.Max(0f, lineWidth);
+		vertexRadiusUV = Mathf.Max(0f, vertexRadiusUV);
 		edgeSoftness = Mathf.Clamp01(edgeSoftness);
 		TrimIndices();
 		if (Application.isPlaying)
@@ -201,6 +206,9 @@ public class Poly2D : MonoBehaviour
 		mpb.SetFloat("_LineWidth", lineWidth / 1000f);
 		mpb.SetFloat("_SoftEdge", edgeSoftness);
 		mpb.SetColor("_Color", color);
+		// Vertex display toggles
+		mpb.SetInt("_ShowVertices", showVertices ? 1 : 0);
+		mpb.SetVector("_VertexRadiusUV", new Vector4(vertexRadiusUV, vertexRadiusUV, 0f, 0f));
 		mr.SetPropertyBlock(mpb);
 	}
 

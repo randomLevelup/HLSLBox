@@ -5,6 +5,8 @@ Shader "Unlit/Polygon"
 		_Color ("Color", Color) = (1,1,1,1)
 		_LineWidth ("Line Width (UV)", Float) = 0.01
 		_SoftEdge ("Soft Edge", Range(0,1)) = 0.75
+		_ShowVertices ("Show Vertices", Float) = 0
+		_VertexRadiusUV ("Vertex Radius UV", Vector) = (0.01, 0.01, 0, 0)
 	}
 	SubShader
 	{
@@ -32,6 +34,8 @@ Shader "Unlit/Polygon"
 			float4 _Color;
 			float _LineWidth; // in UV units
 			float _SoftEdge;  // 0..1 fraction of width
+			int _ShowVertices;
+			float2 _VertexRadiusUV;
 
 			struct appdata
 			{
@@ -82,13 +86,41 @@ Shader "Unlit/Polygon"
 				return d;
 			}
 
+			// Anti-aliased circle alpha falloff (copied from Particles.shader)
+			float circleAlpha(float2 p, float2 center, float2 r)
+			{
+				float2 q = (p - center) / r;
+				float d = length(q);
+				float w = saturate(_SoftEdge * 0.99);
+				float a = 1.0 - smoothstep(1.0 - w, 1.0, d);
+				return a;
+			}
+
 			float4 frag(v2f i) : SV_Target
 			{
 				float d = DrawPolygonLines(i.uv);
 				// SDF to alpha: width with soft edge falloff
 				float halfW = max(1e-6, _LineWidth * 0.5);
 				float feather = _SoftEdge * halfW;
-				float alpha = 1.0 - smoothstep(halfW - feather, halfW + feather, d);
+				float alphaLines = 1.0 - smoothstep(halfW - feather, halfW + feather, d);
+
+				// Optionally draw vertex discs
+				float alphaVerts = 0.0;
+				if (_ShowVertices != 0 && _PolyCount > 0)
+				{
+					int count = _PolyCount;
+					[loop]
+					for (int k = 0; k < count; k++)
+					{
+						int idx = _PolyIndices[k];
+						idx = clamp(idx, 0, _ParticleCount - 1);
+						float2 c = _Positions[idx];
+						alphaVerts += circleAlpha(i.uv, c, _VertexRadiusUV);
+					}
+					alphaVerts = saturate(alphaVerts);
+				}
+
+				float alpha = saturate(alphaLines + alphaVerts - alphaLines * alphaVerts); // screen-like blend
 				return float4(_Color.rgb, _Color.a * alpha);
 			}
 			ENDHLSL
