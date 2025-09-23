@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using HLSLBox.Algorithms;
 
 [ExecuteAlways]
 [RequireComponent(typeof(MeshRenderer))]
@@ -31,10 +32,10 @@ public class Simple : Poly2D
         if (!frozen && Time.time - startTime < hullWarmupSeconds)
         {
             // Compute convex hull for a brief warm-up
-            EnsureUVReadback(count);
+            Algo2D.EnsureArraySize(ref uvReadback, count);
             try { posBuffer.GetData(uvReadback); } catch (Exception) { return; }
-            var newIdx = ConvexHull.QuickHullHelper(uvReadback, count);
-            if (IndicesChanged(newIdx))
+            var newIdx = Algo2D.ConvexHullIndices(uvReadback, count);
+            if (!Algo2D.SequenceEqual(indices, newIdx))
             {
                 indices = newIdx;
                 EnsureBuffer();
@@ -52,7 +53,7 @@ public class Simple : Poly2D
 
         // Apply barrier impulses so vertices can't cross polygon segments
         // We only need the particle positions in UV to check crossings and compute impulses.
-        EnsureUVReadback(count);
+        Algo2D.EnsureArraySize(ref uvReadback, count);
         try { posBuffer.GetData(uvReadback); } catch (Exception) { return; }
 
         if (indices == null || indices.Count < 2) return;
@@ -75,17 +76,17 @@ public class Simple : Poly2D
                 Vector2 aPos = uvReadback[ia];
                 Vector2 bPos = uvReadback[ib];
                 // Compute closest point on segment to pi (projection-based)
-                Vector2 ab = bPos - aPos;
-                float abLen2 = Mathf.Max(1e-12f, ab.sqrMagnitude);
-                float t = Vector2.Dot(pi - aPos, ab) / abLen2; // param along segment
-                t = Mathf.Clamp01(t);
-                Vector2 closest = aPos + t * ab;
-                Vector2 d = pi - closest; // vector from segment to point
-                float dist = d.magnitude;
-                if (dist < barrierThicknessUV)
+                Vector2 closest;
+                float t;
+                float dist2 = Algo2D.DistancePointSegmentSq(pi, aPos, bPos, out closest, out t);
+                float thresh2 = barrierThicknessUV * barrierThicknessUV;
+                if (dist2 < thresh2)
                 {
                     // Direction: away from the segment (orientation independent)
-                    Vector2 n = dist > 1e-6f ? (d / dist) : new Vector2(-ab.y, ab.x).normalized;
+                    Vector2 d = pi - closest;
+                    float dist = Mathf.Sqrt(Mathf.Max(0f, dist2));
+                    Vector2 ab = bPos - aPos;
+                    Vector2 n = dist > 1e-6f ? (d / Mathf.Max(1e-6f, dist)) : new Vector2(-ab.y, ab.x).normalized;
                     // Scale impulse by penetration depth for smoother resolution
                     float depth = barrierThicknessUV - dist;
                     Vector2 impulse = n * (barrierStrengthUV * (depth / Mathf.Max(1e-6f, barrierThicknessUV)));
@@ -97,19 +98,6 @@ public class Simple : Poly2D
         }
     }
 
-    void EnsureUVReadback(int count)
-    {
-        if (uvReadback == null || uvReadback.Length != count)
-            uvReadback = new Vector2[count];
-    }
-
-    bool IndicesChanged(List<int> newIdx)
-    {
-        if (indices == null || indices.Count != newIdx.Count) return true;
-        for (int k = 0; k < newIdx.Count; k++) if (indices[k] != newIdx[k]) return true;
-        return false;
-    }
-
     // Called by the custom editor button
     public void ReConvexify()
     {
@@ -117,9 +105,9 @@ public class Simple : Poly2D
         var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
         if (posBuffer == null || count <= 0) return;
-        EnsureUVReadback(count);
+        Algo2D.EnsureArraySize(ref uvReadback, count);
         try { posBuffer.GetData(uvReadback); } catch (Exception) { return; }
-        var newIdx = ConvexHull.QuickHullHelper(uvReadback, count);
+        var newIdx = Algo2D.ConvexHullIndices(uvReadback, count);
         indices = newIdx;
         EnsureBuffer();
         Upload();

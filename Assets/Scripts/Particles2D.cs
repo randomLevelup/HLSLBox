@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using HLSLBox.Algorithms;
 
 public class Particles2D : MonoBehaviour
 {
@@ -158,19 +159,7 @@ public class Particles2D : MonoBehaviour
         UpdateMaterialProperties();
     }
 
-    // Fast inverse square root approximation
-    static float FISQRT(float x)
-    {
-        unsafe
-        {
-            float xhalf = 0.5f * x;
-            int i = *(int*)&x;           // get bits for floating value
-            i = 0x5f3759df - (i >> 1);   // gives initial guess y0
-            x = *(float*)&i;             // convert bits back to float
-            x = x * (1.5f - xhalf * x * x); // Newton step, repeating increases accuracy
-            return x;
-        }
-    }
+    // Fast inverse square root approximation (moved to Algo2D.InSqrt)
 
     void Simulate(float dt)
     {
@@ -213,7 +202,7 @@ public class Particles2D : MonoBehaviour
                 var pj = positions[j];
                 Vector2 d = pj - pi;
                 float dist2 = d.sqrMagnitude + minDistance * minDistance;
-                float invDist = FISQRT(dist2);
+                float invDist = Algo2D.InSqrt(dist2);
                 float invDist2 = invDist * invDist; // 1/dist^2
                 // direction
                 Vector2 dir = d * invDist; // normalized
@@ -306,18 +295,12 @@ public class Particles2D : MonoBehaviour
     Vector2[] tmpForces;
     void EnsureTempForces()
     {
-        if (tmpForces == null || tmpForces.Length != particleCount)
-        {
-            tmpForces = new Vector2[particleCount];
-        }
+        Algo2D.EnsureArraySize(ref tmpForces, particleCount);
     }
 
     void EnsureNoiseFactors()
     {
-        if (noiseFactors == null || noiseFactors.Length != particleCount)
-        {
-            noiseFactors = new float[particleCount];
-        }
+        Algo2D.EnsureArraySize(ref noiseFactors, particleCount);
     }
 
     // --- CPU-side noise to mirror Assets/Shaders/PoorlinBG.shader ---
