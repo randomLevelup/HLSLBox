@@ -36,6 +36,8 @@ public class Poly2D : MonoBehaviour
 	protected bool seeded; // ensure we only auto-seed once per play session
 	Coroutine closestUpdater; // periodic updater for closest points
 	protected Vector2[] uvReadback; // reuse buffer for GPU->CPU readback
+    // Defer GPU buffer (re)creation from OnValidate to Update to avoid editor-time leaks
+    bool validateDirty;
 
 	const int STRIDE_INT = sizeof(int);
 
@@ -43,8 +45,11 @@ public class Poly2D : MonoBehaviour
 	{
 		mr = GetComponent<MeshRenderer>();
 		mpb = new MaterialPropertyBlock();
-		EnsureBuffer();
-		Upload();
+		if (Application.isPlaying)
+		{
+			EnsureBuffer();
+			Upload();
+		}
 		UpdateMaterial();
 	}
 
@@ -53,8 +58,11 @@ public class Poly2D : MonoBehaviour
 		// Ensure dependencies are ready in both play mode and edit mode (ExecuteAlways)
 		if (mr == null) mr = GetComponent<MeshRenderer>();
 		if (mpb == null) mpb = new MaterialPropertyBlock();
-		EnsureBuffer();
-		Upload();
+		if (Application.isPlaying)
+		{
+			EnsureBuffer();
+			Upload();
+		}
 		UpdateMaterial();
 
 		// Start periodic updater
@@ -73,18 +81,23 @@ public class Poly2D : MonoBehaviour
 		Release();
 	}
 
+#if UNITY_EDITOR
+	// Ensure buffers are released prior to domain reloads / recompile in the Editor
+	void OnBeforeAssemblyReload()
+	{
+		Release();
+	}
+#endif
+
 	void OnValidate()
 	{
 		lineWidth = Mathf.Max(0f, lineWidth);
 		vertexRadiusUV = Mathf.Max(0f, vertexRadiusUV);
 		edgeSoftness = Mathf.Clamp01(edgeSoftness);
 		TrimIndices();
-		if (Application.isPlaying)
-		{
-			EnsureBuffer();
-			Upload();
-			UpdateMaterial();
-		}
+		// IMPORTANT: Do not create ComputeBuffers here; Unity may call OnValidate frequently
+		// in play mode and during assembly reloads. Allocate in Update instead.
+		validateDirty = true;
 	}
 
 	void Update()
@@ -101,9 +114,22 @@ public class Poly2D : MonoBehaviour
 			TryAutoSeed();
 		}
 
-		// In case indices change at runtime or particles existance changes
-		Upload();
-		UpdateMaterial();
+		// In case indices change at runtime or particles existence changes
+		if (Application.isPlaying)
+		{
+			if (validateDirty || indicesBuffer == null)
+			{
+				EnsureBuffer();
+				validateDirty = false;
+			}
+			Upload();
+			UpdateMaterial();
+		}
+		else
+		{
+			// In edit mode, avoid allocating GPU buffers; still update material for color/props
+			UpdateMaterial();
+		}
 	}
 
 	void StartUpdateLoop()
@@ -154,6 +180,9 @@ public class Poly2D : MonoBehaviour
 			indicesBuffer = null;
 		}
 	}
+
+	// Public wrapper for editor hooks to force-release GPU buffers
+	public void ReleaseBuffers() => Release();
 
 	protected void Upload()
 	{
