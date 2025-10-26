@@ -58,10 +58,97 @@ namespace HLSLBox.Algorithms
         public static bool IsLeftOf(in Vector2 a, in Vector2 b, in Vector2 c) => Cross(a, b, c) > 0f;
 
         // ------------------------------------------------------------
+        // Unity helpers to reduce boilerplate in render components
+        // ------------------------------------------------------------
+        public static void EnsureComputeBuffer(ref ComputeBuffer buffer, int count, int stride)
+        {
+            count = Mathf.Max(1, count);
+            if (buffer != null && (buffer.count != count || buffer.stride != stride))
+            {
+                buffer.Release();
+                buffer = null;
+            }
+            if (buffer == null)
+            {
+                buffer = new ComputeBuffer(count, stride);
+            }
+        }
+
+        public static void ReleaseComputeBuffer(ref ComputeBuffer buffer)
+        {
+            if (buffer != null)
+            {
+                buffer.Release();
+                buffer = null;
+            }
+        }
+
+        public static void EnsureRendererAndBlock(MonoBehaviour owner, ref MeshRenderer renderer, ref MaterialPropertyBlock block)
+        {
+            if (owner == null) return;
+            if (renderer == null)
+            {
+                renderer = owner.GetComponent<MeshRenderer>();
+            }
+            if (block == null)
+            {
+                block = new MaterialPropertyBlock();
+            }
+        }
+
+        public static void ApplyParticlesToMaterial(MaterialPropertyBlock block, Particles2D particles)
+        {
+            if (block == null) return;
+            if (particles != null && particles.PositionsBuffer != null)
+            {
+                block.SetBuffer("_Positions", particles.PositionsBuffer);
+                block.SetInt("_ParticleCount", particles.ParticleCount);
+            }
+            else
+            {
+                block.SetInt("_ParticleCount", 0);
+            }
+        }
+
+        public static Particles2D FindParticles(Particles2D current)
+        {
+            if (current != null) return current;
+            return UnityEngine.Object.FindObjectOfType<Particles2D>();
+        }
+
+        public static void ClampIndices(List<int> indices, int maxInclusive)
+        {
+            if (indices == null) return;
+            maxInclusive = Mathf.Max(0, maxInclusive);
+            for (int i = 0; i < indices.Count; i++)
+            {
+                int v = indices[i];
+                if (v < 0) v = 0;
+                if (v > maxInclusive) v = maxInclusive;
+                indices[i] = v;
+            }
+        }
+
+        public static void ClampEdges(List<Vector2Int> edges, int maxInclusive)
+        {
+            if (edges == null) return;
+            maxInclusive = Mathf.Max(0, maxInclusive);
+            for (int i = 0; i < edges.Count; i++)
+            {
+                Vector2Int edge = edges[i];
+                if (edge.x < 0) edge.x = 0;
+                if (edge.x > maxInclusive) edge.x = maxInclusive;
+                if (edge.y < 0) edge.y = 0;
+                if (edge.y > maxInclusive) edge.y = maxInclusive;
+                edges[i] = edge;
+            }
+        }
+
+        // ------------------------------------------------------------
         // Distance to segment / closest point
         // ------------------------------------------------------------
         [MethodImplFast]
-        public static float ProjectPointOnSegment01(in Vector2 p, in Vector2 a, in Vector2 b)
+        public static float ProjectPointOnSegment(in Vector2 p, in Vector2 a, in Vector2 b)
         {
             Vector2 ab = b - a;
             float denom = Mathf.Max(1e-12f, ab.sqrMagnitude);
@@ -72,14 +159,14 @@ namespace HLSLBox.Algorithms
         [MethodImplFast]
         public static Vector2 ClosestPointOnSegment(in Vector2 p, in Vector2 a, in Vector2 b, out float t)
         {
-            t = ProjectPointOnSegment01(p, a, b);
+            t = ProjectPointOnSegment(p, a, b);
             return a + (b - a) * t;
         }
 
         [MethodImplFast]
         public static float DistancePointSegmentSq(in Vector2 p, in Vector2 a, in Vector2 b, out Vector2 closest, out float t)
         {
-            t = ProjectPointOnSegment01(p, a, b);
+            t = ProjectPointOnSegment(p, a, b);
             Vector2 ab = b - a;
             closest = a + ab * t;
             Vector2 d = p - closest;
@@ -168,7 +255,7 @@ namespace HLSLBox.Algorithms
             }
         }
 
-        // Small attribute to hint inlining without importing System.Runtime.CompilerServices explicitly at each call site.
+        // Attribute to hint inlining
         [AttributeUsage(AttributeTargets.Method)]
         private sealed class MethodImplFastAttribute : Attribute { }
     }

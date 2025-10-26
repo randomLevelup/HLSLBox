@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using HLSLBox.Algorithms;
 
 [ExecuteAlways]
 [RequireComponent(typeof(MeshRenderer))]
@@ -19,9 +20,6 @@ public class Poly2D : MonoBehaviour
 	[SerializeField, Range(0f, 1f)] float edgeSoftness = 0.75f;
 	[SerializeField] Color color = Color.white;
 	[SerializeField] protected bool closed = true;
-
-	[Header("Behavior")]
-	[SerializeField] protected bool autoSeed = false; // default off for base class
     
 	[Header("Vertex Display")]
 	[SerializeField, Tooltip("Toggle drawing discs at polygon vertices in the polygon shader")] bool showVertices = false;
@@ -31,10 +29,10 @@ public class Poly2D : MonoBehaviour
 	protected ComputeBuffer indicesBuffer; // int per vertex index
 	protected MaterialPropertyBlock mpb;
 	protected MeshRenderer mr;
+	int[] uploadScratch;
 
 	// Runtime behavior
-	protected bool seeded; // ensure we only auto-seed once per play session
-	Coroutine closestUpdater; // periodic updater for closest points
+	Coroutine shapeUpdater; // periodic updater for closest points
 	protected Vector2[] uvReadback; // reuse buffer for GPU->CPU readback
     // Defer GPU buffer (re)creation from OnValidate to Update to avoid editor-time leaks
     bool validateDirty;
@@ -43,8 +41,7 @@ public class Poly2D : MonoBehaviour
 
 	void Awake()
 	{
-		mr = GetComponent<MeshRenderer>();
-		mpb = new MaterialPropertyBlock();
+		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
 		if (Application.isPlaying)
 		{
 			EnsureBuffer();
@@ -56,8 +53,7 @@ public class Poly2D : MonoBehaviour
 	protected virtual void OnEnable()
 	{
 		// Ensure dependencies are ready in both play mode and edit mode (ExecuteAlways)
-		if (mr == null) mr = GetComponent<MeshRenderer>();
-		if (mpb == null) mpb = new MaterialPropertyBlock();
+		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
 		if (Application.isPlaying)
 		{
 			EnsureBuffer();
@@ -95,25 +91,11 @@ public class Poly2D : MonoBehaviour
 		vertexRadiusUV = Mathf.Max(0f, vertexRadiusUV);
 		edgeSoftness = Mathf.Clamp01(edgeSoftness);
 		TrimIndices();
-		// IMPORTANT: Do not create ComputeBuffers here; Unity may call OnValidate frequently
-		// in play mode and during assembly reloads. Allocate in Update instead.
 		validateDirty = true;
 	}
 
 	void Update()
 	{
-		// Attempt auto-find particles at runtime if missing
-		if (Application.isPlaying && particles == null)
-		{
-			TryFindParticles();
-		}
-
-		// Optional auto-seed
-		if (Application.isPlaying && autoSeed && !seeded)
-		{
-			TryAutoSeed();
-		}
-
 		// In case indices change at runtime or particles existence changes
 		if (Application.isPlaying)
 		{
@@ -134,16 +116,16 @@ public class Poly2D : MonoBehaviour
 
 	void StartUpdateLoop()
 	{
-		if (closestUpdater != null) StopCoroutine(closestUpdater);
-		closestUpdater = StartCoroutine(UpdateShapeLoop());
+		if (shapeUpdater != null) StopCoroutine(shapeUpdater);
+		shapeUpdater = StartCoroutine(UpdateShapeLoop());
 	}
 
 	void StopUpdateLoop()
 	{
-		if (closestUpdater != null)
+		if (shapeUpdater != null)
 		{
-			StopCoroutine(closestUpdater);
-			closestUpdater = null;
+			StopCoroutine(shapeUpdater);
+			shapeUpdater = null;
 		}
 	}
 
@@ -161,24 +143,13 @@ public class Poly2D : MonoBehaviour
 
 	protected void EnsureBuffer()
 	{
-		int count = Mathf.Max(1, indices.Count);
-		if (indicesBuffer != null && indicesBuffer.count != count)
-		{
-			Release();
-		}
-		if (indicesBuffer == null)
-		{
-			indicesBuffer = new ComputeBuffer(count, STRIDE_INT);
-		}
+		int count = Mathf.Max(1, indices?.Count ?? 0);
+		Algo2D.EnsureComputeBuffer(ref indicesBuffer, count, STRIDE_INT);
 	}
 
 	protected void Release()
 	{
-		if (indicesBuffer != null)
-		{
-			indicesBuffer.Release();
-			indicesBuffer = null;
-		}
+		Algo2D.ReleaseComputeBuffer(ref indicesBuffer);
 	}
 
 	// Public wrapper for editor hooks to force-release GPU buffers
@@ -188,43 +159,22 @@ public class Poly2D : MonoBehaviour
 	{
 		if (indicesBuffer == null) return;
 		if (indices == null) indices = new List<int>();
-		// Ensure size
-		if (indicesBuffer.count != Mathf.Max(1, indices.Count))
-		{
-			EnsureBuffer();
-		}
-		// Copy with clamping into array for upload
 		int n = Mathf.Max(1, indices.Count);
-		var data = new int[n];
-		if (particles != null)
-		{
-			int max = Mathf.Max(0, particles.ParticleCount - 1);
-			for (int i = 0; i < indices.Count; i++) data[i] = Mathf.Clamp(indices[i], 0, max);
-		}
-		else
-		{
-			for (int i = 0; i < indices.Count; i++) data[i] = Mathf.Max(0, indices[i]);
-		}
-		if (n == 1) data[0] = data[0]; // no-op; ensures non-empty buffer
-		indicesBuffer.SetData(data);
+		Algo2D.EnsureComputeBuffer(ref indicesBuffer, n, STRIDE_INT);
+		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
+		Algo2D.ClampIndices(indices, maxIndex);
+		Algo2D.EnsureArraySize(ref uploadScratch, n);
+		Array.Clear(uploadScratch, 0, n);
+		for (int i = 0; i < indices.Count; i++) uploadScratch[i] = indices[i];
+		indicesBuffer.SetData(uploadScratch);
 	}
 
 	protected void UpdateMaterial()
 	{
-		if (mr == null) mr = GetComponent<MeshRenderer>();
+		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
 		if (mr == null) return;
-		if (mpb == null) mpb = new MaterialPropertyBlock();
 		mr.GetPropertyBlock(mpb);
-		// Provide shared particle positions buffer to shader
-		if (particles != null && particles.PositionsBuffer != null)
-		{
-			mpb.SetBuffer("_Positions", particles.PositionsBuffer);
-			mpb.SetInt("_ParticleCount", particles.ParticleCount);
-		}
-		else
-		{
-			mpb.SetInt("_ParticleCount", 0);
-		}
+		Algo2D.ApplyParticlesToMaterial(mpb, particles);
 		// Polygon specific
 		if (indicesBuffer != null)
 		{
@@ -244,56 +194,7 @@ public class Poly2D : MonoBehaviour
 	protected void TrimIndices()
 	{
 		if (indices == null) return;
-		// Remove negatives
-		for (int i = 0; i < indices.Count; i++)
-		{
-			if (indices[i] < 0) indices[i] = 0;
-		}
-	}
-
-	protected void TryFindParticles()
-	{
-		// Lightweight scene search; only in play mode to avoid editor-time changes
-		if (!Application.isPlaying) return;
-		var found = FindObjectOfType<Particles2D>();
-		if (found != null) particles = found;
-	}
-
-	protected void TryAutoSeed()
-	{
-		if (seeded) return;
-		if (particles == null) return;
-		int count = Mathf.Max(0, particles.ParticleCount);
-		if (count <= 0) return;
-
-		// If user has already provided indices, respect them; otherwise seed up to 3 unique
-		if (indices == null) indices = new List<int>();
-		if (indices.Count < 3)
-		{
-			int target = Mathf.Min(3, count);
-			// Build a set of used indices
-			var used = new HashSet<int>(indices);
-			int safety = 0;
-			while (indices.Count < target && safety < 100)
-			{
-				int r = UnityEngine.Random.Range(0, count);
-				if (used.Add(r)) indices.Add(r);
-				safety++;
-			}
-			EnsureBuffer();
-			Upload();
-			UpdateMaterial();
-		}
-		seeded = true;
-	}
-
-	// Public API
-	public void SetParticles(Particles2D src) => particles = src;
-	public void SetIndices(List<int> orderedIndices)
-	{
-		indices = orderedIndices ?? new List<int>();
-		EnsureBuffer();
-		Upload();
+		Algo2D.ClampIndices(indices, int.MaxValue);
 	}
 }
 

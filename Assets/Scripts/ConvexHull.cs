@@ -7,12 +7,6 @@ using HLSLBox.Algorithms;
 [RequireComponent(typeof(MeshRenderer))]
 public class ConvexHull : Poly2D
 {
-	void Reset()
-	{
-		// Default ConvexHull to auto-seed to quickly show a polygon in scene
-		autoSeed = true;
-	}
-
 	protected override void UpdateShape()
 	{
 		if (particles == null) return;
