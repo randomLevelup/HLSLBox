@@ -22,8 +22,6 @@ public class Poly2D : Edge2D
 	protected ComputeBuffer indicesBuffer; // int per vertex index
 	int[] indicesUploadScratch;
 
-	protected Vector2[] uvReadback; // reuse buffer for GPU->CPU readback (if needed)
-
 	const int STRIDE_INT = sizeof(int);
 
 	// Build base edge pairs from our ordered indices

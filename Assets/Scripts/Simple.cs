@@ -32,9 +32,9 @@ public class Simple : Poly2D
         if (!frozen && Time.time - startTime < hullWarmupSeconds)
         {
             // Compute convex hull for a brief warm-up
-            Algo2D.EnsureArraySize(ref uvReadback, count);
-            try { posBuffer.GetData(uvReadback); } catch (Exception) { return; }
-            var newIdx = Algo2D.ConvexHullIndices(uvReadback, count);
+            Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
+            try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+            var newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
             if (!Algo2D.SequenceEqual(indices, newIdx))
             {
                 indices = newIdx;
@@ -53,17 +53,15 @@ public class Simple : Poly2D
 
         // Apply barrier impulses so vertices can't cross polygon segments
         // We only need the particle positions in UV to check crossings and compute impulses.
-        Algo2D.EnsureArraySize(ref uvReadback, count);
-        try { posBuffer.GetData(uvReadback); } catch (Exception) { return; }
-
-        if (indices == null || indices.Count < 2) return;
+        Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
+        try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
 
         // For each vertex in indices, push it away from any segment if it gets too close
         int m = indices.Count;
         for (int a = 0; a < m; a++)
         {
             int i = indices[a];
-            Vector2 pi = uvReadback[i];
+            Vector2 pi = vtexPositionsUV[i];
 
             // Determine whether polygon is closed; if open, skip the last segment
             int segCount = closed ? m : m - 1;
@@ -73,8 +71,8 @@ public class Simple : Poly2D
                 int ib = indices[(s + 1) % m];
                 if (ia == i || ib == i) continue; // ignore segments that use the vertex itself
 
-                Vector2 aPos = uvReadback[ia];
-                Vector2 bPos = uvReadback[ib];
+                Vector2 aPos = vtexPositionsUV[ia];
+                Vector2 bPos = vtexPositionsUV[ib];
                 // Compute closest point on segment to pi (projection-based)
                 Vector2 closest;
                 float t;
@@ -105,9 +103,9 @@ public class Simple : Poly2D
         var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
         if (posBuffer == null || count <= 0) return;
-        Algo2D.EnsureArraySize(ref uvReadback, count);
-        try { posBuffer.GetData(uvReadback); } catch (Exception) { return; }
-        var newIdx = Algo2D.ConvexHullIndices(uvReadback, count);
+        Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
+        try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+        var newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
         indices = newIdx;
         EnsureBuffer();
         Upload();

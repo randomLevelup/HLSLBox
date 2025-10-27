@@ -14,18 +14,11 @@ public class ConvexHull : Poly2D
 		int count = Mathf.Max(0, particles.ParticleCount);
 		if (posBuffer == null || count <= 0) return;
 
-		Algo2D.EnsureArraySize(ref uvReadback, count);
+		Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
 
-		try
-		{
-			posBuffer.GetData(uvReadback);
-		}
-		catch (Exception)
-		{
-			return;
-		}
+		try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
 
-		var newIdx = Algo2D.ConvexHullIndices(uvReadback, count);
+		var newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
 
 		if (!HLSLBox.Algorithms.Algo2D.SequenceEqual(indices, newIdx))
 		{

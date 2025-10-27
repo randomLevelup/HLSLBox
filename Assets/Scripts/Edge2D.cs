@@ -20,6 +20,7 @@ public class Edge2D : MonoBehaviour
 	[SerializeField] Color color = Color.white;
 
 	// GPU
+	protected Vector2[] vtexPositionsUV; // for CPU-side vertex positions
 	protected ComputeBuffer edgesBuffer;
 	protected MaterialPropertyBlock mpb;
 	protected MeshRenderer mr;
