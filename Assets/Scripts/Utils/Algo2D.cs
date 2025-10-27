@@ -10,9 +10,9 @@ namespace HLSLBox.Algorithms
     /// </summary>
     public static class Algo2D
     {
-        // ------------------------------------------------------------
-        // General helpers
-        // ------------------------------------------------------------
+        //========================================================================
+        // CORE UTILITIES
+        //========================================================================
         public static void EnsureArraySize<T>(ref T[] array, int size)
         {
             if (size < 0) size = 0;
@@ -30,12 +30,13 @@ namespace HLSLBox.Algorithms
             return true;
         }
 
-        // ------------------------------------------------------------
-        // Vector math
-        // ------------------------------------------------------------
-        // Fast inverse square root (1/sqrt(x)) approximation.
-        // Uses the classic bit-level trick and one Newton-Raphson step.
-        // Valid for x > 0. Returns 0 for non-positive inputs.
+        //========================================================================
+        // VECTOR MATH
+        //========================================================================
+
+        // fast inverse square root (1/sqrt(x)) approximation.
+        // classic bit-level trick w/ Newton-Raphson step.
+        // returns 0 for non-positive inputs.
         [MethodImplFast]
         public static float InSqrt(float x)
         {
@@ -57,17 +58,118 @@ namespace HLSLBox.Algorithms
         [MethodImplFast]
         public static bool IsLeftOf(in Vector2 a, in Vector2 b, in Vector2 c) => Cross(a, b, c) > 0f;
 
-        // ------------------------------------------------------------
-        // Unity helpers to reduce boilerplate in render components
-        // ------------------------------------------------------------
+        //========================================================================
+        // GEOMETRY SHIT
+        //========================================================================
+
+        [MethodImplFast]
+        public static float ProjectPointOnSegment(in Vector2 p, in Vector2 a, in Vector2 b)
+        {
+            Vector2 ab = b - a;
+            float denom = Mathf.Max(1e-12f, ab.sqrMagnitude);
+            float t = Vector2.Dot(p - a, ab) / denom;
+            return Mathf.Clamp01(t);
+        }
+
+        [MethodImplFast]
+        public static Vector2 ClosestPointOnSegment(in Vector2 p, in Vector2 a, in Vector2 b, out float t)
+        {
+            t = ProjectPointOnSegment(p, a, b);
+            return a + (b - a) * t;
+        }
+
+        [MethodImplFast]
+        public static float DistancePointSegmentSq(in Vector2 p, in Vector2 a, in Vector2 b, out Vector2 closest, out float t)
+        {
+            t = ProjectPointOnSegment(p, a, b);
+            Vector2 ab = b - a;
+            closest = a + ab * t;
+            Vector2 d = p - closest;
+            return d.sqrMagnitude;
+        }
+
+        [MethodImplFast]
+        public static float DistancePointSegment(in Vector2 p, in Vector2 a, in Vector2 b, out Vector2 closest, out float t)
+        {
+            float d2 = DistancePointSegmentSq(p, a, b, out closest, out t);
+            return Mathf.Sqrt(d2);
+        }
+
+        //========================================================================
+        // CONVEX HULL ALG
+        //========================================================================
+        // Returns the indices of the vertices that form the convex hull of the
+        // given set of 2D points, using the Monotone Chain algorithm.
+        public static List<int> ConvexHullIndices(Vector2[] positions, int count)
+        {
+            var hull = new List<int>();
+            if (positions == null) return hull;
+            if (count <= 0) return hull;
+            if (count == 1)
+            {
+                hull.Add(0);
+                return hull;
+            }
+
+            // Build index array 0..count-1
+            int[] point_ids = new int[count];
+            for (int i = 0; i < count; i++) point_ids[i] = i;
+
+            // Sort by x then y (stable order for deterministic hull)
+            Array.Sort(point_ids, new IndexByXYComparer(positions));
+
+            // Lower hull
+            for (int k = 0; k < point_ids.Length; k++)
+            {
+                int i = point_ids[k];
+                Vector2 pi = positions[i];
+                while (hull.Count >= 2)
+                {
+                    int j = hull[hull.Count - 1];
+                    int h = hull[hull.Count - 2];
+                    // Remove last if it would cause a clockwise turn or colinear (<= 0)
+                    if (Cross(positions[h], positions[j], pi) <= 0f) hull.RemoveAt(hull.Count - 1);
+                    else break;
+                }
+                hull.Add(i);
+            }
+
+            // Upper hull
+            int lowerCount = hull.Count;
+            for (int k = point_ids.Length - 2; k >= 0; k--) // skip last because it's already included
+            {
+                int i = point_ids[k];
+                Vector2 pi = positions[i];
+                while (hull.Count > lowerCount)
+                {
+                    int j = hull[hull.Count - 1];
+                    int h = hull[hull.Count - 2];
+                    if (Cross(positions[h], positions[j], pi) <= 0f) hull.RemoveAt(hull.Count - 1);
+                    else break;
+                }
+                hull.Add(i);
+            }
+
+            // Remove the duplicated first index at the end
+            if (hull.Count > 1)
+                hull.RemoveAt(hull.Count - 1);
+
+            return hull;
+        }
+
+        //========================================================================
+        // UNITY / GRAPHICS INTEGRATION
+        //========================================================================
         public static void EnsureComputeBuffer(ref ComputeBuffer buffer, int count, int stride)
         {
             count = Mathf.Max(1, count);
-            if (buffer != null && (buffer.count != count || buffer.stride != stride))
+            // Release if parameters changed or buffer is invalid
+            if (buffer != null && (!buffer.IsValid() || buffer.count != count || buffer.stride != stride))
             {
                 buffer.Release();
                 buffer = null;
             }
+            // Create if we don't have one
             if (buffer == null)
             {
                 buffer = new ComputeBuffer(count, stride);
@@ -144,102 +246,9 @@ namespace HLSLBox.Algorithms
             }
         }
 
-        // ------------------------------------------------------------
-        // Distance to segment / closest point
-        // ------------------------------------------------------------
-        [MethodImplFast]
-        public static float ProjectPointOnSegment(in Vector2 p, in Vector2 a, in Vector2 b)
-        {
-            Vector2 ab = b - a;
-            float denom = Mathf.Max(1e-12f, ab.sqrMagnitude);
-            float t = Vector2.Dot(p - a, ab) / denom;
-            return Mathf.Clamp01(t);
-        }
-
-        [MethodImplFast]
-        public static Vector2 ClosestPointOnSegment(in Vector2 p, in Vector2 a, in Vector2 b, out float t)
-        {
-            t = ProjectPointOnSegment(p, a, b);
-            return a + (b - a) * t;
-        }
-
-        [MethodImplFast]
-        public static float DistancePointSegmentSq(in Vector2 p, in Vector2 a, in Vector2 b, out Vector2 closest, out float t)
-        {
-            t = ProjectPointOnSegment(p, a, b);
-            Vector2 ab = b - a;
-            closest = a + ab * t;
-            Vector2 d = p - closest;
-            return d.sqrMagnitude;
-        }
-
-        [MethodImplFast]
-        public static float DistancePointSegment(in Vector2 p, in Vector2 a, in Vector2 b, out Vector2 closest, out float t)
-        {
-            float d2 = DistancePointSegmentSq(p, a, b, out closest, out t);
-            return Mathf.Sqrt(d2);
-        }
-
-        // ------------------------------------------------------------
-        // Convex hull (Monotone Chain, O(n log n))
-        // Returns indices into the source array in CCW order without repeating the first point.
-        // ------------------------------------------------------------
-        public static List<int> ConvexHullIndices(Vector2[] positions, int count)
-        {
-            var hull = new List<int>();
-            if (positions == null) return hull;
-            if (count <= 0) return hull;
-            if (count == 1)
-            {
-                hull.Add(0);
-                return hull;
-            }
-
-            // Build index array 0..count-1
-            int[] point_ids = new int[count];
-            for (int i = 0; i < count; i++) point_ids[i] = i;
-
-            // Sort by x then y (stable order for deterministic hull)
-            Array.Sort(point_ids, new IndexByXYComparer(positions));
-
-            // Lower hull
-            for (int k = 0; k < point_ids.Length; k++)
-            {
-                int i = point_ids[k];
-                Vector2 pi = positions[i];
-                while (hull.Count >= 2)
-                {
-                    int j = hull[hull.Count - 1];
-                    int h = hull[hull.Count - 2];
-                    // Remove last if it would cause a clockwise turn or colinear (<= 0)
-                    if (Cross(positions[h], positions[j], pi) <= 0f) hull.RemoveAt(hull.Count - 1);
-                    else break;
-                }
-                hull.Add(i);
-            }
-
-            // Upper hull
-            int lowerCount = hull.Count;
-            for (int k = point_ids.Length - 2; k >= 0; k--) // skip last because it's already included
-            {
-                int i = point_ids[k];
-                Vector2 pi = positions[i];
-                while (hull.Count > lowerCount)
-                {
-                    int j = hull[hull.Count - 1];
-                    int h = hull[hull.Count - 2];
-                    if (Cross(positions[h], positions[j], pi) <= 0f) hull.RemoveAt(hull.Count - 1);
-                    else break;
-                }
-                hull.Add(i);
-            }
-
-            // Remove the duplicated first index at the end
-            if (hull.Count > 1)
-                hull.RemoveAt(hull.Count - 1);
-
-            return hull;
-        }
+        //========================================================================
+        // INTERNAL TYPES
+        //========================================================================
 
         // Comparer used for sorting indices by coordinates without capturing lambdas
         private sealed class IndexByXYComparer : IComparer<int>

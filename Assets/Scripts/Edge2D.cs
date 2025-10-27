@@ -27,7 +27,7 @@ public class Edge2D : MonoBehaviour
 
 	// Runtime state
 	Coroutine edgeUpdater;
-	bool validateDirty;
+	protected bool validateDirty;
 
 	const int STRIDE_EDGE = sizeof(int) * 2;
 
@@ -73,7 +73,7 @@ public class Edge2D : MonoBehaviour
 	}
 #endif
 
-	void OnValidate()
+	protected virtual void OnValidate()
 	{
 		lineWidth = Mathf.Max(0f, lineWidth);
 		edgeSoftness = Mathf.Clamp01(edgeSoftness);
@@ -99,13 +99,13 @@ public class Edge2D : MonoBehaviour
 		}
 	}
 
-	void StartUpdateLoop()
+	protected virtual void StartUpdateLoop()
 	{
 		if (edgeUpdater != null) StopCoroutine(edgeUpdater);
 		edgeUpdater = StartCoroutine(UpdateEdgesLoop());
 	}
 
-	void StopUpdateLoop()
+	protected virtual void StopUpdateLoop()
 	{
 		if (edgeUpdater != null)
 		{
@@ -114,7 +114,7 @@ public class Edge2D : MonoBehaviour
 		}
 	}
 
-	IEnumerator UpdateEdgesLoop()
+	protected virtual IEnumerator UpdateEdgesLoop()
 	{
 		var wait = new WaitForSeconds(0.05f);
 		while (enabled)
@@ -132,12 +132,10 @@ public class Edge2D : MonoBehaviour
 		Algo2D.EnsureComputeBuffer(ref edgesBuffer, count, STRIDE_EDGE);
 	}
 
-	protected void Release()
+	protected virtual void Release()
 	{
 		Algo2D.ReleaseComputeBuffer(ref edgesBuffer);
 	}
-
-	public void ReleaseBuffers() => Release();
 
 	protected void Upload()
 	{
@@ -161,7 +159,7 @@ public class Edge2D : MonoBehaviour
 		edgesBuffer.SetData(uploadScratch);
 	}
 
-	protected void UpdateMaterial()
+	protected virtual void UpdateMaterial()
 	{
 		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
 		if (mr == null) return;
@@ -184,13 +182,21 @@ public class Edge2D : MonoBehaviour
 		Algo2D.ClampEdges(edges, int.MaxValue);
 	}
 
-	public void SetParticles(Particles2D src) => particles = src;
-
-	public void SetEdges(List<Vector2Int> edgeList)
+	public virtual void SetEdges(List<Vector2Int> edgeList)
 	{
 		edges = edgeList ?? new List<Vector2Int>();
 		TrimEdges();
-		EnsureBuffer();
-		Upload();
+		validateDirty = true;
+		if (Application.isPlaying)
+		{
+			EnsureBuffer();
+			Upload();
+		}
+		else
+		{
+#if UNITY_EDITOR
+			UpdateMaterial(); // so we don't create GPU resources during validation
+#endif
+		}
 	}
 }

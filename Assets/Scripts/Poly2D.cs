@@ -6,195 +6,139 @@ using HLSLBox.Algorithms;
 
 [ExecuteAlways]
 [RequireComponent(typeof(MeshRenderer))]
-public class Poly2D : MonoBehaviour
+public class Poly2D : Edge2D
 {
-	[Header("Source Particles")]
-	[SerializeField] protected Particles2D particles;
-
 	[Header("Polygon Indices (subset, ordered)")]
 	[Tooltip("Ordered list of indices into the Particles2D list. Can be open or closed based on 'Closed Polygon'.")]
 	[SerializeField] protected List<int> indices = new List<int>();
 
-	[Header("Line Style")]
-	[SerializeField, Min(0f)] float lineWidth = 0.01f; // in UV units (fraction of bounds)
-	[SerializeField, Range(0f, 1f)] float edgeSoftness = 0.75f;
-	[SerializeField] Color color = Color.white;
 	[SerializeField] protected bool closed = true;
-    
+
 	[Header("Vertex Display")]
 	[SerializeField, Tooltip("Toggle drawing discs at polygon vertices in the polygon shader")] bool showVertices = false;
 	[SerializeField, Min(0f), Tooltip("Vertex radius in UV units (use ~0.005–0.02)")] float vertexRadiusUV = 0.01f;
 
-	// GPU
+	// Polygon-only GPU data for vertex display
 	protected ComputeBuffer indicesBuffer; // int per vertex index
-	protected MaterialPropertyBlock mpb;
-	protected MeshRenderer mr;
-	int[] uploadScratch;
+	int[] indicesUploadScratch;
 
-	// Runtime behavior
-	Coroutine shapeUpdater; // periodic updater for closest points
-	protected Vector2[] uvReadback; // reuse buffer for GPU->CPU readback
-    // Defer GPU buffer (re)creation from OnValidate to Update to avoid editor-time leaks
-    bool validateDirty;
+	protected Vector2[] uvReadback; // reuse buffer for GPU->CPU readback (if needed)
 
 	const int STRIDE_INT = sizeof(int);
 
-	void Awake()
+	// Build base edge pairs from our ordered indices
+	protected void RebuildEdgesFromIndices()
 	{
-		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
-		if (Application.isPlaying)
+		if (indices == null)
 		{
-			EnsureBuffer();
-			Upload();
+			base.SetEdges(new List<Vector2Int>());
+			return;
 		}
-		UpdateMaterial();
-	}
-
-	protected virtual void OnEnable()
-	{
-		// Ensure dependencies are ready in both play mode and edit mode (ExecuteAlways)
-		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
-		if (Application.isPlaying)
+		// Clamp first to particle count if available
+		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
+		Algo2D.ClampIndices(indices, maxIndex);
+		var newEdges = new List<Vector2Int>(Mathf.Max(0, (indices.Count - 1) + (closed && indices.Count > 1 ? 1 : 0)));
+		for (int i = 0; i < indices.Count - 1; i++)
 		{
-			EnsureBuffer();
-			Upload();
+			newEdges.Add(new Vector2Int(indices[i], indices[i + 1]));
 		}
-		UpdateMaterial();
-
-		// Start periodic updater
-		StartUpdateLoop();
+		if (closed && indices.Count > 1)
+		{
+			newEdges.Add(new Vector2Int(indices[indices.Count - 1], indices[0]));
+		}
+		base.SetEdges(newEdges);
 	}
 
-	void OnDisable()
+	protected override void OnValidate()
 	{
-		StopUpdateLoop();
-		Release();
-	}
-
-	void OnDestroy()
-	{
-		StopUpdateLoop();
-		Release();
-	}
-
-#if UNITY_EDITOR
-	// Ensure buffers are released prior to domain reloads / recompile in the Editor
-	void OnBeforeAssemblyReload()
-	{
-		Release();
-	}
-#endif
-
-	void OnValidate()
-	{
-		lineWidth = Mathf.Max(0f, lineWidth);
+		base.OnValidate();
 		vertexRadiusUV = Mathf.Max(0f, vertexRadiusUV);
-		edgeSoftness = Mathf.Clamp01(edgeSoftness);
 		TrimIndices();
+		// Don't rebuild edges during validation to prevent buffer leaks
+		// The actual edge rebuild will happen in OnEnable or Update during play
 		validateDirty = true;
 	}
 
-	void Update()
+	protected override void UpdateMaterial()
 	{
-		// In case indices change at runtime or particles existence changes
-		if (Application.isPlaying)
-		{
-			if (validateDirty || indicesBuffer == null)
-			{
-				EnsureBuffer();
-				validateDirty = false;
-			}
-			Upload();
-			UpdateMaterial();
-		}
-		else
-		{
-			// In edit mode, avoid allocating GPU buffers; still update material for color/props
-			UpdateMaterial();
-		}
-	}
-
-	void StartUpdateLoop()
-	{
-		if (shapeUpdater != null) StopCoroutine(shapeUpdater);
-		shapeUpdater = StartCoroutine(UpdateShapeLoop());
-	}
-
-	void StopUpdateLoop()
-	{
-		if (shapeUpdater != null)
-		{
-			StopCoroutine(shapeUpdater);
-			shapeUpdater = null;
-		}
-	}
-
-	IEnumerator UpdateShapeLoop()
-	{
-		var wait = new WaitForSeconds(0.05f); // ~50 ms
-		while (enabled)
-		{
-			UpdateShape();
-			yield return wait;
-		}
-	}
-
-	protected virtual void UpdateShape() { }
-
-	protected void EnsureBuffer()
-	{
-		int count = Mathf.Max(1, indices?.Count ?? 0);
-		Algo2D.EnsureComputeBuffer(ref indicesBuffer, count, STRIDE_INT);
-	}
-
-	protected void Release()
-	{
-		Algo2D.ReleaseComputeBuffer(ref indicesBuffer);
-	}
-
-	// Public wrapper for editor hooks to force-release GPU buffers
-	public void ReleaseBuffers() => Release();
-
-	protected void Upload()
-	{
-		if (indicesBuffer == null) return;
-		if (indices == null) indices = new List<int>();
-		int n = Mathf.Max(1, indices.Count);
-		Algo2D.EnsureComputeBuffer(ref indicesBuffer, n, STRIDE_INT);
-		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
-		Algo2D.ClampIndices(indices, maxIndex);
-		Algo2D.EnsureArraySize(ref uploadScratch, n);
-		Array.Clear(uploadScratch, 0, n);
-		for (int i = 0; i < indices.Count; i++) uploadScratch[i] = indices[i];
-		indicesBuffer.SetData(uploadScratch);
-	}
-
-	protected void UpdateMaterial()
-	{
-		Algo2D.EnsureRendererAndBlock(this, ref mr, ref mpb);
-		if (mr == null) return;
-		mr.GetPropertyBlock(mpb);
-		Algo2D.ApplyParticlesToMaterial(mpb, particles);
-		// Polygon specific
+		base.UpdateMaterial();
+		// After base sets common properties, attach polygon-specific buffers and props
 		if (indicesBuffer != null)
 		{
 			mpb.SetBuffer("_PolyIndices", indicesBuffer);
 		}
 		mpb.SetInt("_PolyCount", Mathf.Max(0, indices?.Count ?? 0));
 		mpb.SetInt("_PolyClosed", closed ? 1 : 0);
-		mpb.SetFloat("_LineWidth", lineWidth / 1000f);
-		mpb.SetFloat("_SoftEdge", edgeSoftness);
-		mpb.SetColor("_Color", color);
-		// Vertex display toggles
 		mpb.SetInt("_ShowVertices", showVertices ? 1 : 0);
 		mpb.SetVector("_VertexRadiusUV", new Vector4(vertexRadiusUV, vertexRadiusUV, 0f, 0f));
 		mr.SetPropertyBlock(mpb);
+	}
+
+	protected override IEnumerator UpdateEdgesLoop()
+	{
+		var wait = new WaitForSeconds(0.05f);
+		while (enabled)
+		{
+			UpdateShape();
+			RebuildEdgesFromIndices();
+			yield return wait;
+		}
+	}
+
+	protected virtual void UpdateShape() { }
+
+	protected override void Release()
+	{
+		base.Release();
+		Algo2D.ReleaseComputeBuffer(ref indicesBuffer);
+	}
+
+	void EnsureIndicesBuffer()
+	{
+		int count = Mathf.Max(1, indices?.Count ?? 0);
+		Algo2D.EnsureComputeBuffer(ref indicesBuffer, count, STRIDE_INT);
+	}
+
+	void UploadIndices()
+	{
+		if (indicesBuffer == null) return;
+		int n = Mathf.Max(1, indices?.Count ?? 0);
+		Algo2D.EnsureComputeBuffer(ref indicesBuffer, n, STRIDE_INT);
+		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
+		Algo2D.ClampIndices(indices, maxIndex);
+		Algo2D.EnsureArraySize(ref indicesUploadScratch, n);
+		Array.Clear(indicesUploadScratch, 0, n);
+		for (int i = 0; i < (indices?.Count ?? 0); i++) indicesUploadScratch[i] = indices[i];
+		indicesBuffer.SetData(indicesUploadScratch);
 	}
 
 	protected void TrimIndices()
 	{
 		if (indices == null) return;
 		Algo2D.ClampIndices(indices, int.MaxValue);
+	}
+
+	protected override void OnEnable()
+	{
+		base.OnEnable();
+		RebuildEdgesFromIndices();
+		if (Application.isPlaying)
+		{
+			EnsureIndicesBuffer();
+			UploadIndices();
+		}
+		// Ensure edges reflect current indices immediately
+		UpdateMaterial();
+	}
+
+	void LateUpdate()
+	{
+		// Keep polygon index buffer in sync each frame during play/edit as needed
+		if (Application.isPlaying)
+		{
+			EnsureIndicesBuffer();
+			UploadIndices();
+		}
 	}
 }
 
