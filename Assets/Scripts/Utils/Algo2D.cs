@@ -171,9 +171,6 @@ namespace HLSLBox.Algorithms
         [MethodImplFast]
         public static float Cross(in Vector2 a, in Vector2 b, in Vector2 c) => Cross(b - a, c - a);
 
-        [MethodImplFast]
-        public static bool IsLeftOf(in Vector2 a, in Vector2 b, in Vector2 c) => Cross(a, b, c) > 0f;
-
         //========================================================================
         // GEOMETRY SHIT
         //========================================================================
@@ -256,7 +253,7 @@ namespace HLSLBox.Algorithms
                 public EdgeKey(int a, int b) { A = a; B = b; }
                 public bool Equals(EdgeKey other) => A == other.A && B == other.B;
                 public override bool Equals(object obj) => obj is EdgeKey ek && Equals(ek);
-                public override int GetHashCode() => unchecked((A * 397) ^ B);
+                public override int GetHashCode() => HashCode.Combine(A, B);
             }
 
             public class HalfEdge
@@ -433,7 +430,7 @@ namespace HLSLBox.Algorithms
         }
 
         //========================================================================
-        // TRIGNAGULATION ALG
+        // MONOTONE TRIGNAGULATION ALG
         //========================================================================
         public static List<Vector2Int> TriangulateIndices(Vector2[] positions, int count)
         {
@@ -503,8 +500,8 @@ namespace HLSLBox.Algorithms
                         Vector2 pj = positions[chain[j]];
                         Vector2 pt = positions[top];
                         Vector2 pi = positions[vi];
-                        bool isLeft = IsLeftOf(pi, pt, pj);
-                        if ((ujOnLeft && isLeft) || (!ujOnLeft && !isLeft))
+                        bool isLeftOfLine = Cross(pi, pt, pj) > 0f;
+                        if ((ujOnLeft && isLeftOfLine) || (!ujOnLeft && !isLeftOfLine))
                         {
                             // add triangle (u[j], top, vi)
                             dcel.AddTriangle(chain[j], top, vi);
@@ -528,6 +525,86 @@ namespace HLSLBox.Algorithms
                 dcel.AddTriangle(last, vi, stack.Peek());
             }
             return dcel.ToEdgeList();
+        }
+
+        //========================================================================
+        // DELAUNAY TRIGANGULATION ALG
+        //========================================================================
+        
+        // Point record for Delaunay triangulation
+        private readonly struct DelaunayPoint : IEquatable<DelaunayPoint>
+        {
+            public enum PointType : byte
+            {
+                P,             PMinus1,     PMinus2
+             // regular point, below-right, above-left
+            }
+
+            public readonly int Idx;
+            public readonly Vector2 Position;
+            public readonly PointType Type;
+
+            public DelaunayPoint(int idx, Vector2 position, PointType type = PointType.P)
+            {
+                Idx = idx;
+                Position = position;
+                Type = type;
+            }
+
+            public bool Equals(DelaunayPoint other)
+                => Idx == other.Idx && Type == other.Type;
+
+            public override bool Equals(object obj)
+                => obj is DelaunayPoint other && Equals(other);
+
+            public override int GetHashCode() => HashCode.Combine(Idx, Type);
+
+            public static int Compare(DelaunayPoint a, DelaunayPoint b)
+            {
+                switch (a.Type)
+                {
+                    case PointType.PMinus1: return 1; 
+                    case PointType.PMinus2: return -1;
+                    case PointType.P: break;
+                }
+                switch (b.Type)
+                {
+                    case PointType.PMinus1: return -1;
+                    case PointType.PMinus2: return 1;
+                    case PointType.P: break;
+                }
+                int cmp = a.Position.x.CompareTo(b.Position.x);
+                if (cmp != 0) return cmp;
+                return a.Position.y.CompareTo(b.Position.y);
+            }
+
+            public static bool operator ==(DelaunayPoint left, DelaunayPoint right) => left.Equals(right);
+            public static bool operator !=(DelaunayPoint left, DelaunayPoint right) => !left.Equals(right);
+            public static bool operator <(DelaunayPoint a, DelaunayPoint b) => Compare(a, b) < 0;
+            public static bool operator >(DelaunayPoint a, DelaunayPoint b) => Compare(a, b) > 0;
+
+            public bool IsLeftOf(DelaunayPoint pj, DelaunayPoint pi, DelaunayPoint pk)
+            {
+                switch (pi.Type)
+                {
+                    case PointType.PMinus1: return pj < pi;
+                    case PointType.PMinus2: return pj > pi;
+                    case PointType.P: break;
+                }
+                switch (pk.Type)
+                {
+                    case PointType.PMinus1: return pj > pi;
+                    case PointType.PMinus2: return pj < pi;
+                    case PointType.P: break;
+                }
+                return Cross(pj.Position, pi.Position, pk.Position) > 0f;
+            }
+        }
+
+        public static List<Vector2Int> DelaunayTriangulation(Vector2[] positions, int count)
+        {
+            // TODO: Implement Delaunay triangulation
+            return new List<Vector2Int>();
         }
 
         //========================================================================
