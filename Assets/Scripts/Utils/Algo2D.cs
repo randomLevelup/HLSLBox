@@ -324,7 +324,7 @@ namespace HLSLBox.Algorithms
                 OuterFace.OuterComponent = outer[0];
             }
 
-            public HalfEdge GetOrCreateDirectedEdge(int origin, int dest, Face leftFace)
+            public HalfEdge GetOrCreateEdge(int origin, int dest, Face leftFace)
             {
                 if (TryGetEdge(origin, dest, out var e))
                 {
@@ -359,9 +359,9 @@ namespace HLSLBox.Algorithms
                 var face = new Face();
                 Faces.Add(face);
 
-                HalfEdge eab = GetOrCreateDirectedEdge(a, b, face);
-                HalfEdge ebc = GetOrCreateDirectedEdge(b, c, face);
-                HalfEdge eca = GetOrCreateDirectedEdge(c, a, face);
+                HalfEdge eab = GetOrCreateEdge(a, b, face);
+                HalfEdge ebc = GetOrCreateEdge(b, c, face);
+                HalfEdge eca = GetOrCreateEdge(c, a, face);
 
                 // Link cycle for this face
                 eab.Next = ebc; ebc.Prev = eab;
@@ -392,9 +392,45 @@ namespace HLSLBox.Algorithms
             }
         }
 
-        public sealed class Dag<T>
+        public sealed class Dag<T> where T : IEquatable<T>
         {
-            // TODO: implement templated dag
+            private readonly Dictionary<T, List<T>> _childMap = new Dictionary<T, List<T>>();
+            
+            public T Root { get; private set; }
+
+            public void AddRootNode(T root)
+            {
+                Root = root;
+                if (!_childMap.ContainsKey(root))
+                    _childMap[root] = new List<T>();
+            }
+
+            public bool HasChildren(T node)
+            {
+                if (!_childMap.TryGetValue(node, out var children))
+                    return false;
+                return children.Count > 0;
+            }
+
+            public IReadOnlyList<T> GetChildren(T node)
+            {
+                if (!_childMap.TryGetValue(node, out var children))
+                    return new List<T>();
+                return children;
+            }
+
+            public void AddChildren(T parent, params T[] children)
+            {
+                if (!_childMap.ContainsKey(parent))
+                    _childMap[parent] = new List<T>();
+                
+                foreach (var child in children)
+                {
+                    _childMap[parent].Add(child);
+                    if (!_childMap.ContainsKey(child))
+                        _childMap[child] = new List<T>();
+                }
+            }
         }
 
         //========================================================================
@@ -623,9 +659,9 @@ namespace HLSLBox.Algorithms
                 }
             }
             
-            var trisDag = new Dag<DelaunayTriangle>();
-            DCEL trisDcel = new();
-            Dictionary<DelaunayTriangle, DCEL.Face> trisLookup = new();
+            Dag<DelaunayTriangle>                      trisDag = new(); // DAG of triangles
+            DCEL                                      trisDcel = new(); // DCEL stores current triangulation
+            Dictionary<DelaunayTriangle, DCEL.Face> trisLookup = new(); // triangle to DCEL face lookup
 
             DelaunayTriangle FindLeafContainingPoint(DelaunayPoint px)
             {
@@ -657,7 +693,7 @@ namespace HLSLBox.Algorithms
                         }
                     }
                     // Shouldn't reach here
-                    return start;
+                    throw new InvalidOperationException("Failed to find leaf triangle containing px");
                 }
                 return BfsFrom(trisDag.Root);
             }
@@ -679,11 +715,14 @@ namespace HLSLBox.Algorithms
                 return face;
             }
 
-            void LegalizeEdge(DelaunayPoint pi, DelaunayPoint pj)
+            void LinkTwinWithFace(int originIdx, int destIdx, DCEL.Face incidentFace)
             {
-                // edge is legal if pk is NOT inside the circumcircle of triangle (pi, pj, p)
-                // For Delaunay: check if pk is right of or on the circle through pi, pj, p
-                
+                if (trisDcel.TryGetEdge(originIdx, destIdx, out var e))
+                    e.Twin.IncidentFace = incidentFace;
+            }
+
+            void LegalizeEdge(DelaunayPoint pi, DelaunayPoint pj)
+            {                
                 // If {pi, pj} is part of the initial bounding triangle, it's always legal
                 if ((pi.Idx < 0 && pj.Idx < 0) || 
                     (pi.Idx < 0 && pj == highest.Value) || 
@@ -692,38 +731,56 @@ namespace HLSLBox.Algorithms
                     return;
                 }
                 
+                // Otherwise, Edge is legal iff pk is OUTSIDE the circumcircle of triangle (pi, pj, p)
+
                 if (!trisDcel.TryGetEdge(pi.Idx, pj.Idx, out var e))
                     return; // edge doesn't exist
                 
-                // Get the two adjacent triangles
-                int pt_idx = e.Next.Next.Origin;
+                // Get the auxiliary points
+                int pl_idx = e.Next.Next.Origin;
                 int pk_idx = e.Twin.Next.Next.Origin;
                 
-                // If at least one sentinel, edge is legal iff exactly one sentinel or p-2 in {pk,pt}
-                if (pi.Idx < 0 || pj.Idx < 0 || pt_idx < 0 || pk_idx < 0)
+                // If at least one sentinel, edge is legal iff exactly one sentinel or p-2 in {pk,pl}
+                if (pi.Idx < 0 || pj.Idx < 0 || pl_idx < 0 || pk_idx < 0)
                 {
-                    if (Math.Min(pk_idx, pt_idx) < Math.Min(pi.Idx, pj.Idx))
+                    if (Math.Min(pk_idx, pl_idx) < Math.Min(pi.Idx, pj.Idx))
                         return;
                 }
 
-                DelaunayPoint pt = dPoints.Find(dp => dp.Idx == pt_idx);
+                DelaunayPoint pl = dPoints.Find(dp => dp.Idx == pl_idx);
                 DelaunayPoint pk = dPoints.Find(dp => dp.Idx == pk_idx);
                 
-                // InCircle test: is pk inside circumcircle of (pi, pj, p)?
-                // Using determinant form for style points
+                // Is pk inside circumcircle of (pi, pj, pl)?
+                // Test using determinant form
                 Vector2 a = pi.Position - pk.Position;
                 Vector2 b = pj.Position - pk.Position;
-                Vector2 c = pt.Position - pk.Position;
+                Vector2 c = pl.Position - pk.Position;
                 
                 float det =   (a.x * a.x + a.y * a.y) * (b.x * c.y - b.y * c.x)
                             - (b.x * b.x + b.y * b.y) * (a.x * c.y - a.y * c.x)
                             + (c.x * c.x + c.y * c.y) * (a.x * b.y - a.y * b.x);
                 
-                // If det > 0, pk is inside circle, edge is illegal and needs flipping
                 if (det <= 0f)
-                    return; // edge is legal
+                    return; // edge (pi, pj) is legal
                 
-                // TODO: Flip edge (pi, pj) to edge (p, pk) and recursively legalize
+                // pk is inside circle ==> edge is illegal
+                // Flip (pi, pj) to edge (pl, pk) and recursively legalize
+                DCEL.Face ijl, jik, jlk, ikl;
+                ijl = e.IncidentFace;
+                jik = e.Twin.IncidentFace;
+                jlk = AddTriangleToDCEL(new DelaunayTriangle(pj, pl, pk));
+                ikl = AddTriangleToDCEL(new DelaunayTriangle(pi, pk, pl));
+
+                LinkTwinWithFace(pk.Idx, pl.Idx, jlk);
+                LinkTwinWithFace(pl.Idx, pk.Idx, ikl);
+
+                // Update DAG
+                trisDag.AddChildren(ijl, (jlk, ikl));
+                trisDag.AddChildren(jik, (jlk, ikl));
+
+                // Recursively legalize new edges
+                LegalizeEdge(pi, pl);
+                LegalizeEdge(pk, pj);
             }
 
             void SubdivideFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
@@ -734,6 +791,12 @@ namespace HLSLBox.Algorithms
                 f2 = AddTriangleToDCEL(new DelaunayTriangle(tri.B, tri.C, p));
                 f3 = AddTriangleToDCEL(new DelaunayTriangle(tri.C, tri.A, p));
 
+                // Link new half-edges between the three new faces
+                LinkTwinWithFace(tri.A.Idx, p.Idx, f3);
+                LinkTwinWithFace(tri.B.Idx, p.Idx, f2);
+                LinkTwinWithFace(tri.C.Idx, p.Idx, f3);
+
+                // Recursively legalize new edges
                 LegalizeEdge(tri.A, tri.B);
                 LegalizeEdge(tri.B, tri.C);
                 LegalizeEdge(tri.C, tri.A);
@@ -741,7 +804,7 @@ namespace HLSLBox.Algorithms
 
             var rootTriangle = new DelaunayTriangle(highest.Value, pMinus1, pMinus2);
             trisLookup[rootTriangle] = AddTriangleToDCEL(rootTriangle);
-            trisDag.AddNode(rootTriangle);
+            trisDag.AddRootNode(rootTriangle);
             DelaunayTriangle currentTriangle = rootTriangle;
 
             // Consider dpoints in arbitrary order
