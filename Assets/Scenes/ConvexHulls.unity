@@ -365,19 +365,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5c465cc1a5c95af4fa7a241305388f63, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleCount: 31
+  particleCount: 7
   spawnArea: {x: 10, y: 10}
-  particleMass: 8.09
-  repulsionStrength: 5.8
+  particleMass: 5
+  repulsionStrength: 16
   minDistance: 0.1
   dragPerSecond: 2
   maxForce: 1000
   maxVelocity: 10
-  gravity: 44
+  gravity: 32
   noiseModulatesRepulsion: 1
   noiseScale: 30
-  noiseSpeed: 10.3
-  noiseInfluence: 0.444
+  noiseSpeed: 16.52
+  noiseInfluence: 0.55
   bounds: {x: 10, y: 10}
   wrapEdges: 0
   showGizmos: 0

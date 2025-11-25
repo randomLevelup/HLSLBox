@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace HLSLBox.Algorithms
 {
@@ -14,6 +15,7 @@ namespace HLSLBox.Algorithms
 
         public void AddRootNode(T root)
         {
+            // Debug.log($"Adding root node: {root}");
             Root = root;
             if (!_childMap.ContainsKey(root))
                 _childMap[root] = new List<T>();
@@ -21,6 +23,7 @@ namespace HLSLBox.Algorithms
 
         public bool HasChildren(T node)
         {
+            // Debug.log($"Checking if node has children: {node}");
             if (!_childMap.TryGetValue(node, out var children))
                 return false;
             return children.Count > 0;
@@ -28,6 +31,7 @@ namespace HLSLBox.Algorithms
 
         public IReadOnlyList<T> GetChildren(T node)
         {
+            // Debug.log($"Getting children of node: {node}");
             if (!_childMap.TryGetValue(node, out var children))
                 return new List<T>();
             return children;
@@ -35,6 +39,7 @@ namespace HLSLBox.Algorithms
 
         public void AddChildren(T parent, params T[] children)
         {
+            // Debug.log($"Adding children to parent node: {parent}");
             if (!_childMap.ContainsKey(parent))
                 _childMap[parent] = new List<T>();
             
@@ -44,6 +49,17 @@ namespace HLSLBox.Algorithms
                 if (!_childMap.ContainsKey(child))
                     _childMap[child] = new List<T>();
             }
+        }
+
+        public IReadOnlyList<T> GetLeaves()
+        {
+            var leaves = new List<T>();
+            foreach (var kvp in _childMap)
+            {
+                if (kvp.Value.Count == 0)
+                    leaves.Add(kvp.Key);
+            }
+            return leaves;
         }
     }
 }

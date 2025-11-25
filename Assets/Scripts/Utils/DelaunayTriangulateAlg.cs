@@ -51,9 +51,9 @@ namespace HLSLBox.Algorithms
                     case PointType.PMinus2: return 1;
                     case PointType.P: break;
                 }
-                int cmp = a.Position.x.CompareTo(b.Position.x);
+                int cmp = a.Position.y.CompareTo(b.Position.y);
                 if (cmp != 0) return cmp;
-                return a.Position.y.CompareTo(b.Position.y);
+                return b.Position.x.CompareTo(a.Position.x);
             }
 
             public static bool operator ==(DelaunayPoint left, DelaunayPoint right) => left.Equals(right);
@@ -61,24 +61,49 @@ namespace HLSLBox.Algorithms
             public static bool operator <(DelaunayPoint a, DelaunayPoint b) => Compare(a, b) < 0;
             public static bool operator >(DelaunayPoint a, DelaunayPoint b) => Compare(a, b) > 0;
 
+            // Is point pj to the left of directed edge (pi -> pk)?
             public static bool IsLeftOf(DelaunayPoint pj, DelaunayPoint pi, DelaunayPoint pk)
             {
+                // Cases: pj is a sentinel
+                switch (pj.Type)
+                {
+                    case PointType.PMinus1:
+                    {
+                        if (pk.Type == PointType.PMinus2)
+                            return true;  // edge goes toward above-left, p-1 is left of that
+                        if (pi.Type == PointType.PMinus2)
+                            return false; // edge comes from above-left, p-1 is right of that
+                        return pk < pi; // p-1 is left iff edge points down-right
+                    }
+                    case PointType.PMinus2:
+                    {
+                        if (pk.Type == PointType.PMinus1)
+                            return false; // edge goes toward below-right, p-2 is right of that
+                        if (pi.Type == PointType.PMinus1)
+                            return true;  // edge comes from below-right, p-2 is left of that
+                        return pk > pi; // p-2 is left iff edge points "up/left"
+                    }
+                    case PointType.P: break;
+                }
+                
+                // Cases: pj is a regular point
                 switch (pi.Type)
                 {
-                    case PointType.PMinus1: return pj < pi;
-                    case PointType.PMinus2: return pj > pi;
+                    case PointType.PMinus1: return pj < pi; // edge from below-right: left means "less than"
+                    case PointType.PMinus2: return pj > pi; // edge from above-left: left means "greater than"
                     case PointType.P: break;
                 }
                 switch (pk.Type)
                 {
-                    case PointType.PMinus1: return pj > pi;
-                    case PointType.PMinus2: return pj < pi;
+                    case PointType.PMinus1: return pj > pi; // edge toward below-right: left means "greater than"
+                    case PointType.PMinus2: return pj < pi; // edge toward above-left: left means "less than"
                     case PointType.P: break;
                 }
-                // Inline cross product computation
-                Vector2 vij = pj.Position - pi.Position;
+                
+                // All three are regular points: use cross product
                 Vector2 vik = pk.Position - pi.Position;
-                return (vij.x * vik.y - vij.y * vik.x) > 0f;
+                Vector2 vij = pj.Position - pi.Position;
+                return (vik.x * vij.y - vik.y * vij.x) > 0f;
             }
         }
 
@@ -104,38 +129,21 @@ namespace HLSLBox.Algorithms
             {
                 return new[] { A.Idx, B.Idx, C.Idx };
             }
+
+            // For debugging
+            public override string ToString() => $"({A.Idx}, {B.Idx}, {C.Idx})";
         }
 
         public static List<Vector2Int> DelaunayTriangulateIndices(Vector2[] positions, int count)
         {
             var dPoints = new List<DelaunayPoint>(count);
-            for (int i = 0; i < count; i++)
-            {
-                dPoints.Add(new DelaunayPoint(i, positions[i], DelaunayPoint.PointType.P));
-            }
-            DelaunayPoint pMinus1 = new DelaunayPoint(-1, Vector2.zero, DelaunayPoint.PointType.PMinus1);
-            DelaunayPoint pMinus2 = new DelaunayPoint(-2, Vector2.zero, DelaunayPoint.PointType.PMinus2);
-            dPoints.Add(pMinus1);
-            dPoints.Add(pMinus2);
+            DelaunayPoint pMinus1 = new(-1, Vector2.zero, DelaunayPoint.PointType.PMinus1);
+            DelaunayPoint pMinus2 = new(-2, Vector2.zero, DelaunayPoint.PointType.PMinus2);
+            DelaunayPoint? highest = null;
 
             // Current triangulation stored in a DAG: node type is a 3-tuple of DelaunayPoints.
             // Root: triangle composed of the highest-position & the two sentinel points.
             // "Highest position" interpreted as greatest Y, then greatest X.
-            DelaunayPoint? highest = null;
-            foreach (var dp in dPoints)
-            {
-                if (dp.Type == DelaunayPoint.PointType.P)
-                {
-                    if (!highest.HasValue ||
-                        dp.Position.y > highest.Value.Position.y ||
-                            (Mathf.Approximately(dp.Position.y, highest.Value.Position.y) &&
-                             dp.Position.x > highest.Value.Position.x))
-                    {
-                        highest = dp;
-                    }
-                }
-            }
-            
             Dag<DelaunayTriangle> trisDag = new(); // DAG of triangles
             DCEL trisDcel = new(); // DCEL stores current triangulation
             var faceToTriangle = new Dictionary<DCEL.Face, DelaunayTriangle>();
@@ -143,6 +151,7 @@ namespace HLSLBox.Algorithms
             // Breadth-first search for a leaf triangle containing px
             DelaunayTriangle FindLeafContainingPoint(DelaunayPoint px)
             {
+                // Debug.log($"Finding leaf triangle containing point: {px.Idx}");
                 var queue = new Queue<DelaunayTriangle>();
                 var visited = new HashSet<DelaunayTriangle>();
                 queue.Enqueue(trisDag.Root);
@@ -155,7 +164,10 @@ namespace HLSLBox.Algorithms
 
                     // Reject triangles that do not contain the point
                     if (!tri.Contains(px))
+                    {
+                        // Debug.log($"Triangle {tri} does not contain point: {px.Idx}");
                         continue;
+                    }
 
                     // This is the node we want
                     if (!trisDag.HasChildren(tri))
@@ -177,11 +189,8 @@ namespace HLSLBox.Algorithms
                 int b = tri.B.Idx;
                 int c = tri.C.Idx;
 
-                // Ensure CCW order using inline cross product
-                Vector2 ab = tri.B.Position - tri.A.Position;
-                Vector2 ac = tri.C.Position - tri.A.Position;
-                float cross = ab.x * ac.y - ab.y * ac.x;
-                if (cross < 0f)
+                // Ensure CCW order
+                if (!DelaunayPoint.IsLeftOf(tri.C, tri.A, tri.B))
                 {
                     (c, b) = (b, c);
                 }
@@ -192,14 +201,9 @@ namespace HLSLBox.Algorithms
                 return face;
             }
 
-            // void LinkTwinWithFace(int originIdx, int destIdx, DCEL.Face incidentFace)
-            // {
-            //     if (trisDcel.TryGetEdge(originIdx, destIdx, out var e))
-            //         e.Twin.IncidentFace = incidentFace;
-            // }
-
             void LegalizeEdge(DelaunayPoint pi, DelaunayPoint pj)
-            {                
+            {
+                // Debug.log($"Legalizing edge: {pi.Idx} and {pj.Idx}");
                 // If {pi, pj} is part of the initial bounding triangle, it's always legal
                 if ((pi.Idx < 0 && pj.Idx < 0) || 
                     (pi.Idx < 0 && pj == highest.Value) || 
@@ -209,7 +213,6 @@ namespace HLSLBox.Algorithms
                 }
                 
                 // Otherwise, Edge is legal iff pk is OUTSIDE the circumcircle of triangle (pi, pj, pl)
-
                 if (!trisDcel.TryGetEdge(pi.Idx, pj.Idx, out var e))
                     return; // edge doesn't exist
                 
@@ -224,6 +227,7 @@ namespace HLSLBox.Algorithms
                         return;
                 }
 
+                // TODO: Optimize point lookup
                 DelaunayPoint pl = dPoints.Find(dp => dp.Idx == pl_idx);
                 DelaunayPoint pk = dPoints.Find(dp => dp.Idx == pk_idx);
                 
@@ -242,6 +246,7 @@ namespace HLSLBox.Algorithms
 
                 // pk is inside circle ==> edge is illegal
                 // Flip (pi, pj) to edge (pl, pk) and recursively legalize
+                // Debug.log($"Flipping edge ({pi.Idx}, {pj.Idx}) to ({pl.Idx}, {pk.Idx})");
                 var jlkTri = new DelaunayTriangle(pj, pl, pk);
                 var iklTri = new DelaunayTriangle(pi, pk, pl);
 
@@ -263,6 +268,7 @@ namespace HLSLBox.Algorithms
 
             void SubdivideFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
             {
+                // Debug.log($"Subdividing face with point: {p.Idx} at position {p.Position}");
                 // add 3 triangles
                 DelaunayTriangle t1 = new DelaunayTriangle(tri.A, tri.B, p);
                 DelaunayTriangle t2 = new DelaunayTriangle(tri.B, tri.C, p);
@@ -272,15 +278,7 @@ namespace HLSLBox.Algorithms
                 DCEL.Face f2 = AddTriangleToDCEL(t2);
                 DCEL.Face f3 = AddTriangleToDCEL(t3);
 
-                // Link new half-edges between the three new faces
-                // LinkTwinWithFace(tri.A.Idx, p.Idx, f3);
-                // LinkTwinWithFace(tri.B.Idx, p.Idx, f1);
-                // LinkTwinWithFace(tri.C.Idx, p.Idx, f2);
-                // LinkTwinWithFace(p.Idx, tri.A.Idx, f1);
-                // LinkTwinWithFace(p.Idx, tri.B.Idx, f2);
-                // LinkTwinWithFace(p.Idx, tri.C.Idx, f3);
-
-                // Update DAG: original triangle has 3 children
+                // Update DAG
                 trisDag.AddChildren(tri, t1, t2, t3);
 
                 // Recursively legalize edges opposite to the new point
@@ -289,11 +287,52 @@ namespace HLSLBox.Algorithms
                 LegalizeEdge(tri.C, tri.A);
             }
 
-            var rootTriangle = new DelaunayTriangle(highest.Value, pMinus1, pMinus2);
+            /// ALGORITHM SETUP ///
+
+            // Build the point set
+            for (int i = 0; i < count; i++)
+            {
+                dPoints.Add(new DelaunayPoint(i, positions[i], DelaunayPoint.PointType.P));
+            }
+
+            // Add sentinel points
+            dPoints.Add(pMinus1);
+            dPoints.Add(pMinus2);
+
+            // Find the highest point
+            foreach (var dp in dPoints)
+            {
+                if (dp.Type != DelaunayPoint.PointType.P)
+                    continue;
+
+                if (!highest.HasValue ||
+                    dp.Position.y > highest.Value.Position.y ||
+                        (Mathf.Approximately(dp.Position.y, highest.Value.Position.y) &&
+                         dp.Position.x > highest.Value.Position.x))
+                {
+                    highest = dp;
+                }
+            }
+            // Debug.log($"Highest point has position {highest?.Position}");
+
+            if (!highest.HasValue)
+                throw new InvalidOperationException("No valid points provided for triangulation");
+
+            // Init root triangle
+            var rootTriangle = new DelaunayTriangle(highest.Value, pMinus2, pMinus1);
             AddTriangleToDCEL(rootTriangle);
             trisDag.AddRootNode(rootTriangle);
 
-            // Consider dpoints in insertion order (skip sentinels and highest point)
+            // Shuffle points for average-case performance
+            var rand = new System.Random(11111);
+            int n = dPoints.Count;
+            for (int i = n - 1; i > 0; i--)
+            {
+                int j = rand.Next(i + 1);
+                (dPoints[i], dPoints[j]) = (dPoints[j], dPoints[i]);
+            }
+
+            // MAIN LOOP: Consider all dpoints except sentinels and highest point
             foreach (var pr in dPoints)
             {
                 if (pr.Type != DelaunayPoint.PointType.P || pr == highest.Value)
@@ -303,9 +342,26 @@ namespace HLSLBox.Algorithms
                 DelaunayTriangle currentTriangle = FindLeafContainingPoint(pr);
                 SubdivideFaceWithPoint(currentTriangle, pr);
             }
+
+            // Convert DCEL faces of DAG leaves to edge list, filtering out sentinel edges
+            var result = new List<Vector2Int>();
+            var leaves = trisDag.GetLeaves();
             
-            // Convert DCEL to edge list, filtering out sentinel edges
-            return trisDcel.ToEdgeList();
+            foreach (var leaf in leaves)
+            {
+                if (leaf.A.Idx < 0 || leaf.B.Idx < 0 || leaf.C.Idx < 0)
+                    continue;
+                
+                int a = leaf.A.Idx;
+                int b = leaf.B.Idx;
+                int c = leaf.C.Idx;
+                
+                result.Add(new Vector2Int(a, b));
+                result.Add(new Vector2Int(b, c));
+                result.Add(new Vector2Int(c, a));
+            }
+            
+            return result;
         }
     }
 }

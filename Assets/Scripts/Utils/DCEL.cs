@@ -64,11 +64,8 @@ namespace HLSLBox.Algorithms
         {
             if (TryGetEdge(origin, dest, out var e))
             {
-                // Assign face if it's currently the outer/unset side
-                if (e.IncidentFace == null || e.IncidentFace == OuterFace)
-                {
-                    e.IncidentFace = leftFace;
-                }
+                // Edge exists -> reassign its incident face
+                e.IncidentFace = leftFace;
                 return e;
             }
 
@@ -90,6 +87,7 @@ namespace HLSLBox.Algorithms
         // Creates missing half-edges and sets up Next/Prev within the new face loop.
         public Face AddTriangle(int a, int b, int c)
         {
+            // Debug.log($"Adding triangle face with vertices: {a}, {b}, {c}");
             if (a == b || b == c || c == a) return null; // degenerate
 
             var face = new Face();
