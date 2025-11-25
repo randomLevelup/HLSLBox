@@ -17,9 +17,9 @@ public class Triangles : Edge2D
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
         try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
 
-        var newEdges = Algo2D.TriangulateIndices(vtexPositionsUV, count);
+        var newEdges = DelaunayTriangulateAlg.DelaunayTriangulateIndices(vtexPositionsUV, count);
 
-        if (!HLSLBox.Algorithms.Algo2D.SequenceEqual(edges, newEdges))
+        if (!Algo2D.SequenceEqual(edges, newEdges))
         {
             SetEdges(newEdges);
             UpdateMaterial();

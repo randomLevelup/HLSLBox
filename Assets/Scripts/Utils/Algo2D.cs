@@ -4,8 +4,10 @@ using UnityEngine;
 
 namespace HLSLBox.Algorithms
 {
+    /// <summary>
     /// Lightweight, allocation-conscious 2D algorithms commonly used across renderers and behaviors.
     /// Focuses on clarity and good asymptotic complexity.
+    /// </summary>
     public static class Algo2D
     {
         //========================================================================
@@ -197,246 +199,77 @@ namespace HLSLBox.Algorithms
         }
 
         //========================================================================
-        // DCEL STRUCTURE
+        // DCEL CONSTRUCTOR (for Monotone Triangulation)
         //========================================================================
-        public class DCEL
+        // Constructor from a simple polygon touring all vertices in some order
+        // This constructor remains in Algo2D for use by MonotoneTriangulateIndices
+        private static DCEL CreateDCELFromPolygon(List<int> vertices, int count)
         {
-            // Represents a directed edge key (origin -> dest)
-            private readonly struct EdgeKey : IEquatable<EdgeKey>
+            var dcel = new DCEL();
+            if (vertices == null || vertices.Count < 3) return dcel;
+
+            // Create inner (polygon) face and the unbounded outer face
+            var innerFace = new DCEL.Face();
+            dcel.Faces.Add(innerFace);
+
+            int n = vertices.Count;
+            var inner = new DCEL.HalfEdge[n];
+            var outer = new DCEL.HalfEdge[n];
+
+            // Create paired half-edges for each polygon side
+            for (int i = 0; i < n; i++)
             {
-                public readonly int A;
-                public readonly int B;
-                public EdgeKey(int a, int b) { A = a; B = b; }
-                public bool Equals(EdgeKey other) => A == other.A && B == other.B;
-                public override bool Equals(object obj) => obj is EdgeKey ek && Equals(ek);
-                public override int GetHashCode() => HashCode.Combine(A, B);
-            }
+                int a = vertices[i];
+                int b = vertices[(i + 1) % n];
 
-            public class HalfEdge
-            {
-                public int Origin; // index of origin vertex
-                public HalfEdge Twin;
-                public HalfEdge Next;
-                public HalfEdge Prev;
-                public Face IncidentFace;
-            }
-
-            public class Face
-            {
-                public HalfEdge OuterComponent;
-                public List<HalfEdge> InnerComponents = new List<HalfEdge>();
-            }
-
-            public List<HalfEdge> HalfEdges = new List<HalfEdge>();
-
-            public List<Face> Faces = new List<Face>();
-
-            // Optional explicit reference to the unbounded (outside) face
-            public Face OuterFace { get; private set; }
-
-            // Directed edge lookup
-            private readonly Dictionary<EdgeKey, HalfEdge> _edgeMap = new Dictionary<EdgeKey, HalfEdge>();
-
-            private void RegisterEdge(int origin, int dest, HalfEdge e)
-                => _edgeMap[new EdgeKey(origin, dest)] = e;
-
-            public bool TryGetEdge(int origin, int dest, out HalfEdge edge)
-                => _edgeMap.TryGetValue(new EdgeKey(origin, dest), out edge);
-
-            // Constructor for an empty DCEL
-            public DCEL()
-            {
-                HalfEdges = new List<HalfEdge>();
-                Faces = new List<Face>();
-                OuterFace = new Face();
-                Faces.Add(OuterFace);
-            }
-
-            // Constructor from a simple polygon touring all vertices in some order
-            public DCEL(List<int> vertices)
-            {
-                if (vertices == null || vertices.Count < 3) return;
-
-                // Create inner (polygon) face and the unbounded outer face
-                OuterFace = new Face();
-                Faces.Add(OuterFace);
-                var innerFace = new Face();
-                Faces.Add(innerFace);
-
-                int n = vertices.Count;
-                var inner = new HalfEdge[n];
-                var outer = new HalfEdge[n];
-
-                // Create paired half-edges for each polygon side
-                for (int i = 0; i < n; i++)
+                // inner a->b
+                inner[i] = new DCEL.HalfEdge
                 {
-                    int a = vertices[i];
-                    int b = vertices[(i + 1) % n];
-
-                    // inner a->b
-                    inner[i] = new HalfEdge
-                    {
-                        Origin = a,
-                        IncidentFace = innerFace
-                    };
-                    // outer b->a (reverse direction, belongs to OuterFace)
-                    outer[i] = new HalfEdge
-                    {
-                        Origin = b,
-                        IncidentFace = OuterFace
-                    };
-
-                    // set twins immediately
-                    inner[i].Twin = outer[i];
-                    outer[i].Twin = inner[i];
-
-                    HalfEdges.Add(inner[i]);
-                    HalfEdges.Add(outer[i]);
-                }
-
-                // Link inner cycle (assume input vertices wound CCW)
-                for (int i = 0; i < n; i++)
+                    Origin = a,
+                    IncidentFace = innerFace
+                };
+                // outer b->a (reverse direction, belongs to OuterFace)
+                outer[i] = new DCEL.HalfEdge
                 {
-                    inner[i].Next = inner[(i + 1) % n];
-                    inner[i].Prev = inner[(i - 1 + n) % n];
-                }
+                    Origin = b,
+                    IncidentFace = dcel.OuterFace
+                };
 
-                // Link outer cycle in reverse order (CW)
-                for (int i = 0; i < n; i++)
-                {
-                    // If inner is a->b with index i, the corresponding outer is b->a with same i
-                    // The outer boundary should traverse b->a then a->prev, which is outer[(i - 1 + n)%n]
-                    outer[i].Next = outer[(i - 1 + n) % n];
-                    outer[i].Prev = outer[(i + 1) % n];
-                }
+                // set twins immediately
+                inner[i].Twin = outer[i];
+                outer[i].Twin = inner[i];
 
-                // Register directed edges in the map
-                for (int i = 0; i < n; i++)
-                {
-                    int a = vertices[i];
-                    int b = vertices[(i + 1) % n];
-                    RegisterEdge(a, b, inner[i]);
-                    RegisterEdge(b, a, outer[i]);
-                }
-
-                // Assign representative boundary edges
-                innerFace.OuterComponent = inner[0];
-                OuterFace.OuterComponent = outer[0];
+                dcel.HalfEdges.Add(inner[i]);
+                dcel.HalfEdges.Add(outer[i]);
             }
 
-            public HalfEdge GetOrCreateEdge(int origin, int dest, Face leftFace)
+            // Link inner cycle (assume input vertices wound CCW)
+            for (int i = 0; i < n; i++)
             {
-                if (TryGetEdge(origin, dest, out var e))
-                {
-                    // Assign face if it's currently the outer/unset side
-                    if (e.IncidentFace == null || e.IncidentFace == OuterFace)
-                    {
-                        e.IncidentFace = leftFace;
-                    }
-                    return e;
-                }
-
-                // Create the pair (origin->dest) and (dest->origin)
-                var he = new HalfEdge { Origin = origin, IncidentFace = leftFace };
-                var te = new HalfEdge { Origin = dest, IncidentFace = OuterFace };
-                he.Twin = te; te.Twin = he;
-
-                HalfEdges.Add(he);
-                HalfEdges.Add(te);
-
-                RegisterEdge(origin, dest, he);
-                RegisterEdge(dest, origin, te);
-
-                return he;
+                inner[i].Next = inner[(i + 1) % n];
+                inner[i].Prev = inner[(i - 1 + n) % n];
             }
 
-            // Adds a triangle face defined by vertices (a, b, c) in CCW order.
-            // Creates missing half-edges and sets up Next/Prev within the new face loop.
-            public Face AddTriangle(int a, int b, int c)
+            // Link outer cycle in reverse order (CW)
+            for (int i = 0; i < n; i++)
             {
-                if (a == b || b == c || c == a) return; // degenerate
-
-                var face = new Face();
-                Faces.Add(face);
-
-                HalfEdge eab = GetOrCreateEdge(a, b, face);
-                HalfEdge ebc = GetOrCreateEdge(b, c, face);
-                HalfEdge eca = GetOrCreateEdge(c, a, face);
-
-                // Link cycle for this face
-                eab.Next = ebc; ebc.Prev = eab;
-                ebc.Next = eca; eca.Prev = ebc;
-                eca.Next = eab; eab.Prev = eca;
-
-                face.OuterComponent = eab;
-
-                return face;
+                // If inner is a->b with index i, the corresponding outer is b->a with same i
+                // The outer boundary should traverse b->a then a->prev, which is outer[(i - 1 + n)%n]
+                outer[i].Next = outer[(i - 1 + n) % n];
+                outer[i].Prev = outer[(i + 1) % n];
             }
 
-            // Convert to list of undirected edge pairs
-            public List<Vector2Int> ToEdgeList()
-            {
-                var edgeList = new List<Vector2Int>();
-                var seen = new HashSet<EdgeKey>();
-                foreach (var he in HalfEdges)
-                {
-                    var key = new EdgeKey(he.Origin, he.Twin.Origin);
-                    var revKey = new EdgeKey(he.Twin.Origin, he.Origin);
-                    if (!seen.Contains(key) && !seen.Contains(revKey))
-                    {
-                        edgeList.Add(new Vector2Int(he.Origin, he.Twin.Origin));
-                        seen.Add(key);
-                    }
-                }
-                return edgeList;
-            }
-        }
-
-        public sealed class Dag<T> where T : IEquatable<T>
-        {
-            private readonly Dictionary<T, List<T>> _childMap = new Dictionary<T, List<T>>();
+            // Assign representative boundary edges
+            innerFace.OuterComponent = inner[0];
+            dcel.OuterFace.OuterComponent = outer[0];
             
-            public T Root { get; private set; }
-
-            public void AddRootNode(T root)
-            {
-                Root = root;
-                if (!_childMap.ContainsKey(root))
-                    _childMap[root] = new List<T>();
-            }
-
-            public bool HasChildren(T node)
-            {
-                if (!_childMap.TryGetValue(node, out var children))
-                    return false;
-                return children.Count > 0;
-            }
-
-            public IReadOnlyList<T> GetChildren(T node)
-            {
-                if (!_childMap.TryGetValue(node, out var children))
-                    return new List<T>();
-                return children;
-            }
-
-            public void AddChildren(T parent, params T[] children)
-            {
-                if (!_childMap.ContainsKey(parent))
-                    _childMap[parent] = new List<T>();
-                
-                foreach (var child in children)
-                {
-                    _childMap[parent].Add(child);
-                    if (!_childMap.ContainsKey(child))
-                        _childMap[child] = new List<T>();
-                }
-            }
+            return dcel;
         }
 
         //========================================================================
         // MONOTONE TRIGNAGULATION ALG
         //========================================================================
-        public static List<Vector2Int> TriangulateIndices(Vector2[] positions, int count)
+        public static List<Vector2Int> MonotoneTriangulateIndices(Vector2[] positions, int count)
         {
             if (positions == null || count <= 0) return new List<Vector2Int>();
             count = Mathf.Clamp(count, 0, positions.Length);
@@ -470,7 +303,7 @@ namespace HLSLBox.Algorithms
             indices.AddRange(left);
 
             // build doubly-connected edge list
-            DCEL dcel = new(indices, count);
+            DCEL dcel = CreateDCELFromPolygon(indices, count);
             Stack<int> stack = new Stack<int>();
             stack.Push(chain[0]);
             stack.Push(chain[1]);
@@ -531,295 +364,7 @@ namespace HLSLBox.Algorithms
             return dcel.ToEdgeList();
         }
 
-        //========================================================================
-        // DELAUNAY TRIGANGULATION ALG
-        //========================================================================
-        
-        // Point record for Delaunay triangulation
-        private readonly struct DelaunayPoint : IEquatable<DelaunayPoint>
-        {
-            public enum PointType : byte
-            {
-                P,             PMinus1,     PMinus2
-             // regular point, below-right, above-left
-            }
 
-            public readonly int Idx;
-            public readonly Vector2 Position;
-            public readonly PointType Type;
-
-            public DelaunayPoint(int idx, Vector2 position, PointType type = PointType.P)
-            {
-                Idx = idx;
-                Position = position;
-                Type = type;
-            }
-
-            public bool Equals(DelaunayPoint other)
-                => Idx == other.Idx && Type == other.Type;
-
-            public override bool Equals(object obj)
-                => obj is DelaunayPoint other && Equals(other);
-
-            public override int GetHashCode() => HashCode.Combine(Idx, Type);
-
-            public static int Compare(DelaunayPoint a, DelaunayPoint b)
-            {
-                switch (a.Type)
-                {
-                    case PointType.PMinus1: return 1; 
-                    case PointType.PMinus2: return -1;
-                    case PointType.P: break;
-                }
-                switch (b.Type)
-                {
-                    case PointType.PMinus1: return -1;
-                    case PointType.PMinus2: return 1;
-                    case PointType.P: break;
-                }
-                int cmp = a.Position.x.CompareTo(b.Position.x);
-                if (cmp != 0) return cmp;
-                return a.Position.y.CompareTo(b.Position.y);
-            }
-
-            public static bool operator ==(DelaunayPoint left, DelaunayPoint right) => left.Equals(right);
-            public static bool operator !=(DelaunayPoint left, DelaunayPoint right) => !left.Equals(right);
-            public static bool operator <(DelaunayPoint a, DelaunayPoint b) => Compare(a, b) < 0;
-            public static bool operator >(DelaunayPoint a, DelaunayPoint b) => Compare(a, b) > 0;
-
-            public static bool IsLeftOf(DelaunayPoint pj, DelaunayPoint pi, DelaunayPoint pk)
-            {
-                switch (pi.Type)
-                {
-                    case PointType.PMinus1: return pj < pi;
-                    case PointType.PMinus2: return pj > pi;
-                    case PointType.P: break;
-                }
-                switch (pk.Type)
-                {
-                    case PointType.PMinus1: return pj > pi;
-                    case PointType.PMinus2: return pj < pi;
-                    case PointType.P: break;
-                }
-                return Cross(pj.Position, pi.Position, pk.Position) > 0f;
-            }
-        }
-
-        /// Triangle type for graph nodes, with point location features.
-        private readonly struct DelaunayTriangle : IEquatable<DelaunayTriangle>
-        {
-            public readonly DelaunayPoint A;
-            public readonly DelaunayPoint B;
-            public readonly DelaunayPoint C;
-            public DelaunayTriangle(DelaunayPoint a, DelaunayPoint b, DelaunayPoint c) { A = a; B = b; C = c; }
-            public bool Equals(DelaunayTriangle other)
-                => A.Equals(other.A) && B.Equals(other.B) && C.Equals(other.C);
-            public override bool Equals(object obj)
-                => obj is DelaunayTriangle other && Equals(other);
-            public override int GetHashCode()
-                => HashCode.Combine(A, B, C);
-            public bool Contains(DelaunayPoint px)
-                => DelaunayPoint.IsLeftOf(A, B, C) &&
-                   DelaunayPoint.IsLeftOf(B, C, A) &&
-                   DelaunayPoint.IsLeftOf(C, A, B);
-
-            public IReadOnlyList<int> Indices()
-            {
-                return new[] { A.Idx, B.Idx, C.Idx };
-            }
-        }
-
-        public static List<Vector2Int> DelaunayTriangulation(Vector2[] positions, int count)
-        {
-            var dPoints = new List<DelaunayPoint>(count);
-            for (int i = 0; i < count; i++)
-            {
-                dPoints.Add(new DelaunayPoint(i, positions[i], DelaunayPoint.PointType.P));
-            }
-            DelaunayPoint pMinus1 = new DelaunayPoint(-1, Vector2.zero, DelaunayPoint.PointType.PMinus1);
-            DelaunayPoint pMinus2 = new DelaunayPoint(-2, Vector2.zero, DelaunayPoint.PointType.PMinus2);
-            dPoints.Add(pMinus1);
-            dPoints.Add(pMinus2);
-
-            // Current triangulation stored in a DAG: node type is a 3-tuple of DelaunayPoints.
-            // Root: triangle composed of the highest-position & the two sentinel points.
-            // "Highest position" interpreted as greatest Y, then greatest X.
-            DelaunayPoint? highest = null;
-            foreach (var dp in dPoints)
-            {
-                if (dp.Type == DelaunayPoint.PointType.P)
-                {
-                    if (!highest.HasValue ||
-                        dp.Position.y > highest.Value.Position.y ||
-                            (Mathf.Approximately(dp.Position.y, highest.Value.Position.y) &&
-                             dp.Position.x > highest.Value.Position.x))
-                    {
-                        highest = dp;
-                    }
-                }
-            }
-            
-            Dag<DelaunayTriangle>                      trisDag = new(); // DAG of triangles
-            DCEL                                      trisDcel = new(); // DCEL stores current triangulation
-            Dictionary<DelaunayTriangle, DCEL.Face> trisLookup = new(); // triangle to DCEL face lookup
-
-            DelaunayTriangle FindLeafContainingPoint(DelaunayPoint px)
-            {
-                // Breadth-first search for a leaf triangle containing px
-                DelaunayTriangle BfsFrom(DelaunayTriangle start)
-                {
-                    var queue = new Queue<DelaunayTriangle>();
-                    var visited = new HashSet<DelaunayTriangle>();
-                    queue.Enqueue(start);
-
-                    while (queue.Count > 0)
-                    {
-                        var tri = queue.Dequeue();
-                        if (!visited.Add(tri))
-                            continue; // already seen
-
-                        // Reject triangles that do not contain the point
-                        if (!tri.Contains(px))
-                            continue;
-
-                        // This is the node we want
-                        if (!trisDag.HasChildren(tri))
-                            return tri;
-
-                        // Enqueue children
-                        foreach (var child in trisDag.GetChildren(tri))
-                        {
-                            queue.Enqueue(child);
-                        }
-                    }
-                    // Shouldn't reach here
-                    throw new InvalidOperationException("Failed to find leaf triangle containing px");
-                }
-                return BfsFrom(trisDag.Root);
-            }
-
-            DCEL.Face AddTriangleToDCEL(DelaunayTriangle tri)
-            {                
-                int a = tri.A.Idx;
-                int b = tri.B.Idx;
-                int c = tri.C.Idx;
-
-                // Ensure CCW order
-                float cross = Cross(tri.A.Position, tri.B.Position, tri.C.Position);
-                if (cross < 0f)
-                {
-                    (c, b) = (b, c);
-                }
-
-                var face = trisDcel.AddTriangle(a, b, c);
-                return face;
-            }
-
-            void LinkTwinWithFace(int originIdx, int destIdx, DCEL.Face incidentFace)
-            {
-                if (trisDcel.TryGetEdge(originIdx, destIdx, out var e))
-                    e.Twin.IncidentFace = incidentFace;
-            }
-
-            void LegalizeEdge(DelaunayPoint pi, DelaunayPoint pj)
-            {                
-                // If {pi, pj} is part of the initial bounding triangle, it's always legal
-                if ((pi.Idx < 0 && pj.Idx < 0) || 
-                    (pi.Idx < 0 && pj == highest.Value) || 
-                    (pj.Idx < 0 && pi == highest.Value))
-                {
-                    return;
-                }
-                
-                // Otherwise, Edge is legal iff pk is OUTSIDE the circumcircle of triangle (pi, pj, p)
-
-                if (!trisDcel.TryGetEdge(pi.Idx, pj.Idx, out var e))
-                    return; // edge doesn't exist
-                
-                // Get the auxiliary points
-                int pl_idx = e.Next.Next.Origin;
-                int pk_idx = e.Twin.Next.Next.Origin;
-                
-                // If at least one sentinel, edge is legal iff exactly one sentinel or p-2 in {pk,pl}
-                if (pi.Idx < 0 || pj.Idx < 0 || pl_idx < 0 || pk_idx < 0)
-                {
-                    if (Math.Min(pk_idx, pl_idx) < Math.Min(pi.Idx, pj.Idx))
-                        return;
-                }
-
-                DelaunayPoint pl = dPoints.Find(dp => dp.Idx == pl_idx);
-                DelaunayPoint pk = dPoints.Find(dp => dp.Idx == pk_idx);
-                
-                // Is pk inside circumcircle of (pi, pj, pl)?
-                // Test using determinant form
-                Vector2 a = pi.Position - pk.Position;
-                Vector2 b = pj.Position - pk.Position;
-                Vector2 c = pl.Position - pk.Position;
-                
-                float det =   (a.x * a.x + a.y * a.y) * (b.x * c.y - b.y * c.x)
-                            - (b.x * b.x + b.y * b.y) * (a.x * c.y - a.y * c.x)
-                            + (c.x * c.x + c.y * c.y) * (a.x * b.y - a.y * b.x);
-                
-                if (det <= 0f)
-                    return; // edge (pi, pj) is legal
-                
-                // pk is inside circle ==> edge is illegal
-                // Flip (pi, pj) to edge (pl, pk) and recursively legalize
-                DCEL.Face ijl, jik, jlk, ikl;
-                ijl = e.IncidentFace;
-                jik = e.Twin.IncidentFace;
-                jlk = AddTriangleToDCEL(new DelaunayTriangle(pj, pl, pk));
-                ikl = AddTriangleToDCEL(new DelaunayTriangle(pi, pk, pl));
-
-                LinkTwinWithFace(pk.Idx, pl.Idx, jlk);
-                LinkTwinWithFace(pl.Idx, pk.Idx, ikl);
-
-                // Update DAG
-                trisDag.AddChildren(ijl, (jlk, ikl));
-                trisDag.AddChildren(jik, (jlk, ikl));
-
-                // Recursively legalize new edges
-                LegalizeEdge(pi, pl);
-                LegalizeEdge(pk, pj);
-            }
-
-            void SubdivideFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
-            {
-                // add 3 triangles
-                DCEL.Face f1, f2, f3;
-                f1 = AddTriangleToDCEL(new DelaunayTriangle(tri.A, tri.B, p));
-                f2 = AddTriangleToDCEL(new DelaunayTriangle(tri.B, tri.C, p));
-                f3 = AddTriangleToDCEL(new DelaunayTriangle(tri.C, tri.A, p));
-
-                // Link new half-edges between the three new faces
-                LinkTwinWithFace(tri.A.Idx, p.Idx, f3);
-                LinkTwinWithFace(tri.B.Idx, p.Idx, f2);
-                LinkTwinWithFace(tri.C.Idx, p.Idx, f3);
-
-                // Recursively legalize new edges
-                LegalizeEdge(tri.A, tri.B);
-                LegalizeEdge(tri.B, tri.C);
-                LegalizeEdge(tri.C, tri.A);
-            }
-
-            var rootTriangle = new DelaunayTriangle(highest.Value, pMinus1, pMinus2);
-            trisLookup[rootTriangle] = AddTriangleToDCEL(rootTriangle);
-            trisDag.AddRootNode(rootTriangle);
-            DelaunayTriangle currentTriangle = rootTriangle;
-
-            // Consider dpoints in arbitrary order
-            foreach (var pr in dPoints)
-            {
-                // Find triangle containing pr
-                currentTriangle = FindLeafContainingPoint(pr);
-                SubdivideFaceWithPoint(currentTriangle, pr);
-
-                // TODO: Deal with colinear pr during subdivision
-            }
-            
-            // TODO: Finish Delaunay triangulation algorithm
-            return new List<Vector2Int>();
-        }
 
         //========================================================================
         // CONVEX HULL ALG
