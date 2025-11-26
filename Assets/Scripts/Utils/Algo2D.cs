@@ -50,7 +50,7 @@ namespace HLSLBox.Algorithms
                 // Median of Three
                 int a  = left,    b  = (left + right) >> 1,  c  = right;
                 int ia = idx[a],  ib = idx[b],               ic = idx[c];
-                
+
                 T A = list[ia];
                 T B = list[ib];
                 T C = list[ic];
@@ -262,7 +262,7 @@ namespace HLSLBox.Algorithms
             // Assign representative boundary edges
             innerFace.OuterComponent = inner[0];
             dcel.OuterFace.OuterComponent = outer[0];
-            
+
             return dcel;
         }
 

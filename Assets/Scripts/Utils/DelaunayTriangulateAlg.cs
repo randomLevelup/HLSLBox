@@ -41,7 +41,7 @@ namespace HLSLBox.Algorithms
             {
                 switch (a.Type)
                 {
-                    case PointType.PMinus1: return 1; 
+                    case PointType.PMinus1: return 1;
                     case PointType.PMinus2: return -1;
                     case PointType.P: break;
                 }
@@ -85,7 +85,7 @@ namespace HLSLBox.Algorithms
                     }
                     case PointType.P: break;
                 }
-                
+
                 // Cases: pj is a regular point
                 switch (pi.Type)
                 {
@@ -99,7 +99,7 @@ namespace HLSLBox.Algorithms
                     case PointType.PMinus2: return pj < pi; // edge toward above-left: left means "less than"
                     case PointType.P: break;
                 }
-                
+
                 // All three are regular points: use cross product
                 Vector2 vik = pk.Position - pi.Position;
                 Vector2 vij = pj.Position - pi.Position;
@@ -184,7 +184,7 @@ namespace HLSLBox.Algorithms
             }
 
             DCEL.Face AddTriangleToDCEL(DelaunayTriangle tri)
-            {                
+            {
                 int a = tri.A.Idx;
                 int b = tri.B.Idx;
                 int c = tri.C.Idx;
@@ -205,21 +205,21 @@ namespace HLSLBox.Algorithms
             {
                 // Debug.log($"Legalizing edge: {pi.Idx} and {pj.Idx}");
                 // If {pi, pj} is part of the initial bounding triangle, it's always legal
-                if ((pi.Idx < 0 && pj.Idx < 0) || 
-                    (pi.Idx < 0 && pj == highest.Value) || 
+                if ((pi.Idx < 0 && pj.Idx < 0) ||
+                    (pi.Idx < 0 && pj == highest.Value) ||
                     (pj.Idx < 0 && pi == highest.Value))
                 {
                     return;
                 }
-                
+
                 // Otherwise, Edge is legal iff pk is OUTSIDE the circumcircle of triangle (pi, pj, pl)
                 if (!trisDcel.TryGetEdge(pi.Idx, pj.Idx, out var e))
                     return; // edge doesn't exist
-                
+
                 // Get the auxiliary points
                 int pl_idx = e.Next.Next.Origin;
                 int pk_idx = e.Twin.Next.Next.Origin;
-                
+
                 // If at least one sentinel, edge is legal iff exactly one sentinel or p-2 in {pk,pl}
                 if (pi.Idx < 0 || pj.Idx < 0 || pl_idx < 0 || pk_idx < 0)
                 {
@@ -230,17 +230,17 @@ namespace HLSLBox.Algorithms
                 // TODO: Optimize point lookup
                 DelaunayPoint pl = dPoints.Find(dp => dp.Idx == pl_idx);
                 DelaunayPoint pk = dPoints.Find(dp => dp.Idx == pk_idx);
-                
+
                 // Is pk inside circumcircle of (pi, pj, pl)?
                 // Test using determinant form
                 Vector2 a = pi.Position - pk.Position;
                 Vector2 b = pj.Position - pk.Position;
                 Vector2 c = pl.Position - pk.Position;
-                
+
                 float det =   (a.x * a.x + a.y * a.y) * (b.x * c.y - b.y * c.x)
                             - (b.x * b.x + b.y * b.y) * (a.x * c.y - a.y * c.x)
                             + (c.x * c.x + c.y * c.y) * (a.x * b.y - a.y * b.x);
-                
+
                 if (det <= 0f)
                     return; // edge (pi, pj) is legal
 
@@ -273,7 +273,7 @@ namespace HLSLBox.Algorithms
                 DelaunayTriangle t1 = new DelaunayTriangle(tri.A, tri.B, p);
                 DelaunayTriangle t2 = new DelaunayTriangle(tri.B, tri.C, p);
                 DelaunayTriangle t3 = new DelaunayTriangle(tri.C, tri.A, p);
-                
+
                 DCEL.Face f1 = AddTriangleToDCEL(t1);
                 DCEL.Face f2 = AddTriangleToDCEL(t2);
                 DCEL.Face f3 = AddTriangleToDCEL(t3);
@@ -346,21 +346,21 @@ namespace HLSLBox.Algorithms
             // Convert DCEL faces of DAG leaves to edge list, filtering out sentinel edges
             var result = new List<Vector2Int>();
             var leaves = trisDag.GetLeaves();
-            
+
             foreach (var leaf in leaves)
             {
                 if (leaf.A.Idx < 0 || leaf.B.Idx < 0 || leaf.C.Idx < 0)
                     continue;
-                
+
                 int a = leaf.A.Idx;
                 int b = leaf.B.Idx;
                 int c = leaf.C.Idx;
-                
+
                 result.Add(new Vector2Int(a, b));
                 result.Add(new Vector2Int(b, c));
                 result.Add(new Vector2Int(c, a));
             }
-            
+
             return result;
         }
     }

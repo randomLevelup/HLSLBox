@@ -10,7 +10,7 @@ namespace HLSLBox.Algorithms
     public sealed class Dag<T> where T : IEquatable<T>
     {
         private readonly Dictionary<T, List<T>> _childMap = new Dictionary<T, List<T>>();
-        
+
         public T Root { get; private set; }
 
         public void AddRootNode(T root)
@@ -42,7 +42,7 @@ namespace HLSLBox.Algorithms
             // Debug.log($"Adding children to parent node: {parent}");
             if (!_childMap.ContainsKey(parent))
                 _childMap[parent] = new List<T>();
-            
+
             foreach (var child in children)
             {
                 _childMap[parent].Add(child);
