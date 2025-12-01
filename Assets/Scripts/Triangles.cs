@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using UnityEngine;
 using HLSLBox.Algorithms;
 
@@ -7,7 +8,7 @@ using HLSLBox.Algorithms;
 [RequireComponent(typeof(MeshRenderer))]
 public class Triangles : Edge2D
 {
-    protected override void UpdateEdges()
+    protected override async void UpdateEdges()
     {
         if (particles == null) return;
         var posBuffer = particles.PositionsBuffer;
@@ -17,7 +18,7 @@ public class Triangles : Edge2D
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
         try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
 
-        var newEdges = DelaunayTriangulateAlg.DelaunayTriangulateIndices(vtexPositionsUV, count);
+        var newEdges = await DelaunayTriangulateAlg.DelaunayTriangulateIndices(vtexPositionsUV, count);
 
         if (!Algo2D.SequenceEqual(edges, newEdges))
         {

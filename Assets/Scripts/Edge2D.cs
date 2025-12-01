@@ -78,7 +78,7 @@ public class Edge2D : MonoBehaviour
 	{
 		lineWidth = Mathf.Max(0f, lineWidth);
 		edgeSoftness = Mathf.Clamp01(edgeSoftness);
-		TrimEdges();
+		Algo2D.ClampEdges(edges, int.MaxValue);
 		validateDirty = true;
 	}
 
@@ -177,16 +177,10 @@ public class Edge2D : MonoBehaviour
 		mr.SetPropertyBlock(mpb);
 	}
 
-	protected void TrimEdges()
-	{
-		if (edges == null) return;
-		Algo2D.ClampEdges(edges, int.MaxValue);
-	}
-
 	public virtual void SetEdges(List<Vector2Int> edgeList)
 	{
 		edges = edgeList ?? new List<Vector2Int>();
-		TrimEdges();
+		Algo2D.ClampEdges(edges, int.MaxValue);
 		validateDirty = true;
 		if (Application.isPlaying)
 		{

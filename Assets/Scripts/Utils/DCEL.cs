@@ -88,7 +88,7 @@ namespace HLSLBox.Algorithms
         public Face AddTriangle(int a, int b, int c)
         {
             // Debug.log($"Adding triangle face with vertices: {a}, {b}, {c}");
-            if (a == b || b == c || c == a) return null; // degenerate
+            if (a == b || b == c || c == a) throw new ArgumentException("Degenerate triangle with duplicate vertices.");
 
             var face = new Face();
             Faces.Add(face);

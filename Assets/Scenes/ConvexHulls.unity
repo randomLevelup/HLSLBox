@@ -131,7 +131,6 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 42425070}
-  - component: {fileID: 42425069}
   - component: {fileID: 42425072}
   - component: {fileID: 42425071}
   - component: {fileID: 42425068}
@@ -184,24 +183,6 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &42425069
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 42425067}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 13bc8266dbe52794580d7c59da21f19d, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  particles: {fileID: 766286310}
-  edges:
-  - {x: 1, y: 2}
-  lineWidth: 1.88
-  edgeSoftness: 0.75
-  color: {r: 1, g: 1, b: 1, a: 1}
 --- !u!4 &42425070
 Transform:
   m_ObjectHideFlags: 0
@@ -237,7 +218,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9f315921c1264942902622e6692f5c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particles: {fileID: 766286310}
+  particles: {fileID: 1202541117}
   edges: []
   lineWidth: 1.88
   edgeSoftness: 0.75
@@ -334,7 +315,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &766286309
+--- !u!1 &1202541114
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -342,10 +323,10 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 766286313}
-  - component: {fileID: 766286310}
-  - component: {fileID: 766286312}
-  - component: {fileID: 766286311}
+  - component: {fileID: 1202541118}
+  - component: {fileID: 1202541117}
+  - component: {fileID: 1202541116}
+  - component: {fileID: 1202541115}
   m_Layer: 0
   m_Name: Particles
   m_TagString: Untagged
@@ -353,44 +334,13 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &766286310
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 766286309}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5c465cc1a5c95af4fa7a241305388f63, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  particleCount: 7
-  spawnArea: {x: 10, y: 10}
-  particleMass: 5
-  repulsionStrength: 16
-  minDistance: 0.1
-  dragPerSecond: 2
-  maxForce: 1000
-  maxVelocity: 10
-  gravity: 32
-  noiseModulatesRepulsion: 1
-  noiseScale: 30
-  noiseSpeed: 16.52
-  noiseInfluence: 0.55
-  bounds: {x: 10, y: 10}
-  wrapEdges: 0
-  showGizmos: 0
-  gizmoRadius: 0.05
-  particleRadius: 0.04
-  edgeSoftness: 0.679
---- !u!23 &766286311
+--- !u!23 &1202541115
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 766286309}
+  m_GameObject: {fileID: 1202541114}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 0
@@ -426,21 +376,52 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!33 &766286312
+--- !u!33 &1202541116
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 766286309}
+  m_GameObject: {fileID: 1202541114}
   m_Mesh: {fileID: 10210, guid: 0000000000000000e000000000000000, type: 0}
---- !u!4 &766286313
+--- !u!114 &1202541117
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1202541114}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5c465cc1a5c95af4fa7a241305388f63, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  particleCount: 23
+  spawnArea: {x: 10, y: 10}
+  particleMass: 5
+  repulsionStrength: 16
+  minDistance: 0.1
+  dragPerSecond: 2
+  maxForce: 1000
+  maxVelocity: 10
+  gravity: 69
+  noiseModulatesRepulsion: 1
+  noiseScale: 81.4
+  noiseSpeed: 16.52
+  noiseInfluence: 0.344
+  bounds: {x: 10, y: 10}
+  wrapEdges: 0
+  showGizmos: 0
+  gizmoRadius: 0.05
+  particleRadius: 0.04
+  edgeSoftness: 0.679
+--- !u!4 &1202541118
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 766286309}
+  m_GameObject: {fileID: 1202541114}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
@@ -546,7 +527,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a17596310cc8c0348afe8c9d74554e9b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particles: {fileID: 766286310}
+  particles: {fileID: 0}
   edges: []
   lineWidth: 1.29
   edgeSoftness: 0.75
@@ -567,7 +548,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 57a0ed716f39c2049bdbc27c7cf904b9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particles: {fileID: 766286310}
+  particles: {fileID: 0}
   edges:
   - {x: 1, y: 2}
   - {x: 2, y: 3}
@@ -662,7 +643,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 78771836563aa994ca9a39a54b34b45b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particles: {fileID: 766286310}
+  particles: {fileID: 0}
   edges: []
   lineWidth: 1.52
   edgeSoftness: 0.75
@@ -778,7 +759,7 @@ SceneRoots:
   m_Roots:
   - {fileID: 519420032}
   - {fileID: 1416965098}
-  - {fileID: 766286313}
+  - {fileID: 1202541118}
   - {fileID: 1331357614}
   - {fileID: 1392201944}
   - {fileID: 42425070}
