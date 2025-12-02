@@ -117,7 +117,9 @@ public class Edge2D : MonoBehaviour
 
 	protected virtual IEnumerator UpdateEdgesLoop()
 	{
+		var startWait = new WaitForSeconds(4f);
 		var wait = new WaitForSeconds(0.05f);
+		yield return startWait;
 		while (enabled)
 		{
 			UpdateEdges();

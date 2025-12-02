@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading.Tasks;
 using UnityEngine;
 
@@ -145,6 +146,18 @@ namespace HLSLBox.Algorithms
 
         public static async Task<List<Vector2Int>> DelaunayTriangulateIndices(Vector2[] positions, int count)
         {
+            var debugLogBuilder = new StringBuilder();
+            void DebugLog(string message) => debugLogBuilder.AppendLine(message);
+            void FlushDebugLog()
+            {
+                if (debugLogBuilder.Length == 0)
+                    return;
+
+                Debug.Log(debugLogBuilder.ToString());
+                debugLogBuilder.Clear();
+            }
+
+            DebugLog("==========================================\nStarting Delaunay triangulation...");
             var dPoints = new List<DelaunayPoint>(count);
             DelaunayPoint pMinus1 = new(-1, Vector2.zero, DelaunayPoint.PointType.PMinus1);
             DelaunayPoint pMinus2 = new(-2, Vector2.zero, DelaunayPoint.PointType.PMinus2);
@@ -223,7 +236,7 @@ namespace HLSLBox.Algorithms
 
                 // Otherwise, Edge is legal iff pk is OUTSIDE the circumcircle of triangle (pi, pj, pl)
                 if (!trisDcel.TryGetEdge(pi.Idx, pj.Idx, out var e))
-                    return; // edge doesn't exist
+                    return;
 
                 // Get the auxiliary points
                 int pl_idx, pk_idx;
@@ -232,10 +245,11 @@ namespace HLSLBox.Algorithms
                     pl_idx = e.Next.Next.Origin;
                     pk_idx = e.Twin.Next.Next.Origin;
                 }
-                catch (NullReferenceException)
+                catch (NullReferenceException ex)
                 {
-                    Debug.Log($"Edge ({pi.Idx}, {pj.Idx}) has no adjacent triangle; cannot legalize.");
-                    return;
+                    DebugLog($"Edge ({pi.Idx}, {pj.Idx}) has no adjacent triangle; cannot legalize.\nHighest point is {highest?.Idx}");
+                    FlushDebugLog();
+                    throw new InvalidOperationException($"Edge ({pi.Idx}, {pj.Idx}) has no adjacent triangle", ex);
                 }
 
                 // If at least one sentinel, edge is legal iff exactly one sentinel or p-2 in {pk,pl}
@@ -263,7 +277,7 @@ namespace HLSLBox.Algorithms
 
                 // else, pk is inside circle ==> edge is illegal
                 // Flip (pi, pj) to edge (pl, pk) and recursively legalize
-                // Debug.log($"Flipping edge ({pi.Idx}, {pj.Idx}) to ({pl.Idx}, {pk.Idx})");
+                DebugLog($"Flipping edge ({pi.Idx}, {pj.Idx}) to ({pl.Idx}, {pk.Idx})");
                 var jlkTri = new DelaunayTriangle(pj, pl, pk);
                 var iklTri = new DelaunayTriangle(pi, pk, pl);
 
@@ -285,7 +299,7 @@ namespace HLSLBox.Algorithms
 
             async Task SubdivideFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
             {
-                // Debug.log($"Subdividing face with point: {p.Idx} at position {p.Position}");
+                // Debug.Log($"Subdividing face with point: {p.Idx} at position {p.Position}");
                 // add 3 triangles
                 DelaunayTriangle t1 = new DelaunayTriangle(tri.A, tri.B, p);
                 DelaunayTriangle t2 = new DelaunayTriangle(tri.B, tri.C, p);
@@ -294,6 +308,8 @@ namespace HLSLBox.Algorithms
                 DCEL.Face f1 = AddTriangleToDCEL(t1);
                 DCEL.Face f2 = AddTriangleToDCEL(t2);
                 DCEL.Face f3 = AddTriangleToDCEL(t3);
+
+                DebugLog($"Subdivided point {p.Idx} into triangles: {t1}, {t2}, {t3}");
 
                 // Update DAG
                 trisDag.AddChildren(tri, t1, t2, t3);
@@ -306,7 +322,7 @@ namespace HLSLBox.Algorithms
 
             async Task SubdivideDoubleFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
             {
-                Debug.Log($"Degenerate case: double face at point: {p.Idx} at position {p.Position}");
+                DebugLog($"Degenerate case: double face at point: {p.Idx} at position {p.Position}");
                 
                 // Find which edge contains point p
                 DelaunayPoint a, b, c;
@@ -345,9 +361,11 @@ namespace HLSLBox.Algorithms
                 {
                     xIdx = edge.Twin.Next.Next.Origin;
                 }
-                catch (NullReferenceException)
+                catch (NullReferenceException ex)
                 {
-                    throw new InvalidOperationException($"Edge ({a.Idx}, {b.Idx}) has no adjacent triangle");
+                    DebugLog($"Edge ({a.Idx}, {b.Idx}) has no adjacent triangle while handling degenerate face.");
+                    FlushDebugLog();
+                    throw new InvalidOperationException($"Edge ({a.Idx}, {b.Idx}) has no adjacent triangle", ex);
                 }
 
                 DelaunayPoint x = dPoints.Find(dp => dp.Idx == xIdx);
