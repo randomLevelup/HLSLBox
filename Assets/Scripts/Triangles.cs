@@ -18,7 +18,13 @@ public class Triangles : Edge2D
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
         try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
 
-        var newEdges = await DelaunayTriangulateAlg.DelaunayTriangulateIndices(vtexPositionsUV, count);
+        List<Vector2Int> newEdges;
+        try { newEdges = await DelaunayTriangulateAlg.DelaunayTriangulateIndices(vtexPositionsUV, count); }
+        catch (Exception e)
+        {
+            Debug.Log($"Delaunay triangulation failed: {e.Message}");
+            return;
+        }
 
         if (!Algo2D.SequenceEqual(edges, newEdges))
         {

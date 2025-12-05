@@ -106,9 +106,9 @@ namespace HLSLBox.Algorithms
                 Vector2 vik = pk.Position - pi.Position;
                 Vector2 vij = pj.Position - pi.Position;
                 float cross = vik.x * vij.y - vik.y * vij.x;
-                if (cross > 0f)
+                if (cross > 1E-6f)
                     return 1;
-                if (cross < 0f)
+                if (cross < -1E-6f)
                     return -1;
                 return 0;
             }
@@ -238,19 +238,13 @@ namespace HLSLBox.Algorithms
                 if (!trisDcel.TryGetEdge(pi.Idx, pj.Idx, out var e))
                     return;
 
+                // If the edge is on the boundary (Twin has no adjacent triangle), we cannot legalize it.
+                if (e.Twin.Next == null)
+                    return;
+
                 // Get the auxiliary points
-                int pl_idx, pk_idx;
-                try
-                {
-                    pl_idx = e.Next.Next.Origin;
-                    pk_idx = e.Twin.Next.Next.Origin;
-                }
-                catch (NullReferenceException ex)
-                {
-                    DebugLog($"Edge ({pi.Idx}, {pj.Idx}) has no adjacent triangle; cannot legalize.\nHighest point is {highest?.Idx}");
-                    FlushDebugLog();
-                    throw new InvalidOperationException($"Edge ({pi.Idx}, {pj.Idx}) has no adjacent triangle", ex);
-                }
+                int pl_idx = e.Next.Next.Origin;
+                int pk_idx = e.Twin.Next.Next.Origin;
 
                 // If at least one sentinel, edge is legal iff exactly one sentinel or p-2 in {pk,pl}
                 if (pi.Idx < 0 || pj.Idx < 0 || pl_idx < 0 || pk_idx < 0)
@@ -418,8 +412,8 @@ namespace HLSLBox.Algorithms
 
                 if (!highest.HasValue ||
                     dp.Position.y > highest.Value.Position.y ||
-                        (Mathf.Approximately(dp.Position.y, highest.Value.Position.y) &&
-                         dp.Position.x > highest.Value.Position.x))
+                        (dp.Position.y == highest.Value.Position.y &&
+                         dp.Position.x < highest.Value.Position.x))
                 {
                     highest = dp;
                 }

@@ -18,6 +18,7 @@ public class Particles2D : MonoBehaviour
 
     [Header("Attraction")]
     [SerializeField, Tooltip("Acceleration towards center (units/s^2). 0 = off")] float gravity = 30f;
+    [SerializeField, Tooltip("Offset for the center of gravity attraction.")] Vector2 centerOffset = Vector2.zero;
 
     [Header("Noise Repulsion (matches shader)")]
     [SerializeField, Tooltip("When enabled, each particle's repulsion strength is modulated by 2D value noise at its position.")] bool noiseModulatesRepulsion = true;
@@ -221,7 +222,7 @@ public class Particles2D : MonoBehaviour
         {
             for (int i = 0; i < particleCount; i++)
             {
-                Vector2 toCenter = -positions[i];
+                Vector2 toCenter = centerOffset - positions[i];
                 float toCenterMag = Mathf.Max(toCenter.magnitude, minDistance);
                 tmpForces[i] += toCenter / toCenterMag * gravity;
             }
