@@ -97,21 +97,56 @@ public class Simple : Poly2D
     }
 
     // Called by the custom editor button
-    public void ReConvexify()
+    public void ReConvexify(HashSet<int> excludeIndices = null)
     {
+        Debug.Log($"Re-Convexifying Simple polygon excluding {excludeIndices?.Count ?? 0} indices.");
         if (particles == null) return;
         var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
         if (posBuffer == null || count <= 0) return;
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
         try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
-        var newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
+        
+        List<int> newIdx;
+        if (excludeIndices != null && excludeIndices.Count > 0)
+        {
+            var subsetPositions = new List<Vector2>();
+            var indexMap = new List<int>(); // maps subset index -> original index
+            for (int i = 0; i < count; i++)
+            {
+                if (!excludeIndices.Contains(i))
+                {
+                    subsetPositions.Add(vtexPositionsUV[i]);
+                    indexMap.Add(i);
+                }
+            }
+            
+            if (subsetPositions.Count > 0)
+            {
+                var subsetIdx = Algo2D.ConvexHullIndices(subsetPositions.ToArray(), subsetPositions.Count);
+                // Remap subset indices back to original particle indices
+                newIdx = new List<int>(subsetIdx.Count);
+                for (int i = 0; i < subsetIdx.Count; i++)
+                {
+                    newIdx.Add(indexMap[subsetIdx[i]]);
+                }
+            }
+            else newIdx = new List<int>();
+        }
+        else newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
+        
         indices = newIdx;
         EnsureBuffer();
         Upload();
         UpdateMaterial();
-        // Restart warmup if desired:
-        startTime = Time.time;
-        frozen = false;
+        if (excludeIndices == null || excludeIndices.Count == 0)
+        {
+            startTime = Time.time;
+            frozen = false;
+        }
+        else
+        {
+            frozen = true; // Keep frozen to prevent UpdateShape from overwriting the excluded hull
+        }
     }
 }

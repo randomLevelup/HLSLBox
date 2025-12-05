@@ -10,7 +10,7 @@ public class Poly2D : Edge2D
 {
 	[Header("Polygon Indices (subset, ordered)")]
 	[Tooltip("Ordered list of indices into the Particles2D list. Can be open or closed based on 'Closed Polygon'.")]
-	[SerializeField] protected List<int> indices = new List<int>();
+	[SerializeField] public List<int> indices = new List<int>();
 
 	[SerializeField] protected bool closed = true;
 
