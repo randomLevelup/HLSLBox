@@ -25,6 +25,9 @@ Shader "Unlit/Edges"
 			StructuredBuffer<float2> _Positions; // UV-space [0..1]
 			int _ParticleCount;
 
+			StructuredBuffer<float2> _VirtualPositions; // optional extra vertices
+			int _VirtualCount;
+
 			StructuredBuffer<int2> _EdgePairs;   // pairs of indices
 			int _EdgeCount;
 
@@ -60,6 +63,20 @@ Shader "Unlit/Edges"
 				return length(pa - ba * h);
 			}
 
+			float2 FetchPosition(int index)
+			{
+				if (index >= 0 && index < _ParticleCount)
+				{
+					return _Positions[index];
+				}
+				int v = index - _ParticleCount;
+				if (v >= 0 && v < _VirtualCount)
+				{
+					return _VirtualPositions[v];
+				}
+				return float2(0, 0);
+			}
+
 			float minDistanceToEdges(float2 uv)
 			{
 				if (_EdgeCount <= 0 || _ParticleCount <= 0) return 1e5;
@@ -69,11 +86,11 @@ Shader "Unlit/Edges"
 				for (int i = 0; i < _EdgeCount; i++)
 				{
 					int2 pair = _EdgePairs[i];
-					int i0 = clamp(pair.x, 0, _ParticleCount - 1);
-					int i1 = clamp(pair.y, 0, _ParticleCount - 1);
+					int i0 = pair.x;
+					int i1 = pair.y;
 
-					float2 a = _Positions[i0];
-					float2 b = _Positions[i1];
+					float2 a = FetchPosition(i0);
+					float2 b = FetchPosition(i1);
 
 					// Handle degenerate edge as a point
 					if (all(a == b))

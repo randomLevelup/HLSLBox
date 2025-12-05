@@ -33,7 +33,7 @@ public class Poly2D : Edge2D
 			return;
 		}
 		// Clamp first to particle count if available
-		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
+		int maxIndex = GetMaxVertexIndex();
 		Algo2D.ClampIndices(indices, maxIndex);
 		var newEdges = new List<Vector2Int>(Mathf.Max(0, (indices.Count - 1) + (closed && indices.Count > 1 ? 1 : 0)));
 		for (int i = 0; i < indices.Count - 1; i++)
@@ -102,7 +102,7 @@ public class Poly2D : Edge2D
 		if (indicesBuffer == null) return;
 		int n = Mathf.Max(1, indices?.Count ?? 0);
 		Algo2D.EnsureComputeBuffer(ref indicesBuffer, n, STRIDE_INT);
-		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
+		int maxIndex = GetMaxVertexIndex();
 		Algo2D.ClampIndices(indices, maxIndex);
 		Algo2D.EnsureArraySize(ref indicesUploadScratch, n);
 		Array.Clear(indicesUploadScratch, 0, n);

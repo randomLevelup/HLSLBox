@@ -140,7 +140,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!23 &42425068
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -218,7 +218,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f9f315921c1264942902622e6692f5c6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particles: {fileID: 0}
+  particles: {fileID: 544987898}
   edges: []
   lineWidth: 1.88
   edgeSoftness: 0.75
@@ -372,7 +372,7 @@ MeshRenderer:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 544987897}
-  m_Enabled: 0
+  m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 0
   m_DynamicOccludee: 1
@@ -663,7 +663,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &1547383338
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -728,7 +728,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   particles: {fileID: 544987898}
   edges: []
-  lineWidth: 0.01
+  lineWidth: 1.75
   edgeSoftness: 0.75
   color: {r: 1, g: 1, b: 1, a: 1}
   indices: 
@@ -770,7 +770,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &1681365397
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -887,7 +887,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!23 &2071233377
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -993,8 +993,8 @@ SceneRoots:
   - {fileID: 519420032}
   - {fileID: 1416965098}
   - {fileID: 544987901}
+  - {fileID: 1547383341}
   - {fileID: 2071233380}
   - {fileID: 1681365400}
-  - {fileID: 1547383341}
   - {fileID: 42425070}
   - {fileID: 1331357614}

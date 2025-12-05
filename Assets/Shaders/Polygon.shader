@@ -27,6 +27,9 @@ Shader "Unlit/Polygon"
 			StructuredBuffer<float2> _Positions; // UV-space [0..1]
 			int _ParticleCount;
 
+			StructuredBuffer<float2> _VirtualPositions; // optional extra vertices
+			int _VirtualCount;
+
 			StructuredBuffer<int> _PolyIndices;
 			int _PolyCount;
 			int _PolyClosed;
@@ -64,6 +67,25 @@ Shader "Unlit/Polygon"
 				return length(pa - ba * h);
 			}
 
+			float2 FetchPosition(int index)
+			{
+				if (index >= 0 && index < _ParticleCount)
+				{
+					return _Positions[index];
+				}
+				int v = index - _ParticleCount;
+				if (v >= 0 && v < _VirtualCount)
+				{
+					return _VirtualPositions[v];
+				}
+				return float2(0, 0);
+			}
+
+			int MaxIndex()
+			{
+				return _ParticleCount + _VirtualCount - 1;
+			}
+
 			float DrawPolygonLines(float2 uv)
 			{
 				// Return min distance to any edge defined by indices
@@ -71,16 +93,17 @@ Shader "Unlit/Polygon"
 
 				float d = 1e5;
 				int last = _PolyClosed != 0 ? _PolyCount : _PolyCount - 1;
+				int maxIdx = MaxIndex();
 				[loop]
 				for (int i = 0; i < last; i++)
 				{
 					int i0 = _PolyIndices[i];
 					int i1 = _PolyIndices[(i + 1) % _PolyCount];
 					// Clamp safety (though CPU already clamps)
-					i0 = clamp(i0, 0, _ParticleCount - 1);
-					i1 = clamp(i1, 0, _ParticleCount - 1);
-					float2 a = _Positions[i0];
-					float2 b = _Positions[i1];
+					i0 = clamp(i0, 0, maxIdx);
+					i1 = clamp(i1, 0, maxIdx);
+					float2 a = FetchPosition(i0);
+					float2 b = FetchPosition(i1);
 					d = min(d, sdSegment(uv, a, b));
 				}
 				return d;
@@ -109,12 +132,13 @@ Shader "Unlit/Polygon"
 				if (_ShowVertices != 0 && _PolyCount > 0)
 				{
 					int count = _PolyCount;
+					int maxIdx = MaxIndex();
 					[loop]
 					for (int k = 0; k < count; k++)
 					{
 						int idx = _PolyIndices[k];
-						idx = clamp(idx, 0, _ParticleCount - 1);
-						float2 c = _Positions[idx];
+						idx = clamp(idx, 0, maxIdx);
+						float2 c = FetchPosition(idx);
 						alphaVerts += circleAlpha(i.uv, c, _VertexRadiusUV);
 					}
 					alphaVerts = saturate(alphaVerts);

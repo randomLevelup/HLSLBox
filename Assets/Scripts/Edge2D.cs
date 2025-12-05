@@ -22,6 +22,8 @@ public class Edge2D : MonoBehaviour
 	// GPU
 	protected Vector2[] vtexPositionsUV; // for CPU-side vertex positions
 	protected ComputeBuffer edgesBuffer;
+	protected ComputeBuffer virtualPositionsBuffer; // optional extra vertices (UV space)
+	protected int virtualVertexCount;
 	protected MaterialPropertyBlock mpb;
 	protected MeshRenderer mr;
 	int[] uploadScratch; // flat int array for int2 pairs
@@ -31,6 +33,7 @@ public class Edge2D : MonoBehaviour
 	protected bool validateDirty;
 
 	const int STRIDE_EDGE = sizeof(int) * 2;
+	const int STRIDE_FLOAT2 = sizeof(float) * 2;
 
 	void Awake()
 	{
@@ -138,6 +141,7 @@ public class Edge2D : MonoBehaviour
 	protected virtual void Release()
 	{
 		Algo2D.ReleaseComputeBuffer(ref edgesBuffer);
+		Algo2D.ReleaseComputeBuffer(ref virtualPositionsBuffer);
 	}
 
 	protected void Upload()
@@ -146,7 +150,7 @@ public class Edge2D : MonoBehaviour
 		if (edges == null) edges = new List<Vector2Int>();
 		int count = Mathf.Max(1, edges.Count);
 		Algo2D.EnsureComputeBuffer(ref edgesBuffer, count, STRIDE_EDGE);
-		int maxIndex = particles != null ? particles.ParticleCount - 1 : int.MaxValue;
+		int maxIndex = GetMaxVertexIndex();
 		Algo2D.ClampEdges(edges, maxIndex);
 		// Create flat int array: each edge contributes 2 ints (x, y)
 		Algo2D.EnsureArraySize(ref uploadScratch, count * 2);
@@ -172,7 +176,12 @@ public class Edge2D : MonoBehaviour
 		{
 			mpb.SetBuffer("_EdgePairs", edgesBuffer);
 		}
+		if (virtualPositionsBuffer != null && virtualVertexCount > 0)
+		{
+			mpb.SetBuffer("_VirtualPositions", virtualPositionsBuffer);
+		}
 		mpb.SetInt("_EdgeCount", Mathf.Max(0, edges?.Count ?? 0));
+		mpb.SetInt("_VirtualCount", Mathf.Max(0, virtualVertexCount));
 		mpb.SetFloat("_LineWidth", lineWidth / 1000f);
 		mpb.SetFloat("_SoftEdge", edgeSoftness);
 		mpb.SetColor("_Color", color);
@@ -195,5 +204,26 @@ public class Edge2D : MonoBehaviour
 			UpdateMaterial(); // so we don't create GPU resources during validation
 #endif
 		}
+	}
+
+	// Optional hook for subclasses to expose extra virtual vertices to the shader
+	protected void SetVirtualVertices(List<Vector2> virtualVerts)
+	{
+		virtualVertexCount = Mathf.Max(0, virtualVerts?.Count ?? 0);
+		if (virtualVertexCount <= 0)
+		{
+			Algo2D.ReleaseComputeBuffer(ref virtualPositionsBuffer);
+			return;
+		}
+		Algo2D.EnsureComputeBuffer(ref virtualPositionsBuffer, virtualVertexCount, STRIDE_FLOAT2);
+		virtualPositionsBuffer.SetData(virtualVerts);
+	}
+
+	// Max index accounting for optional virtual vertices
+	protected virtual int GetMaxVertexIndex()
+	{
+		int baseCount = particles != null ? particles.ParticleCount : 0;
+		int maxIndex = baseCount + Mathf.Max(0, virtualVertexCount) - 1;
+		return maxIndex >= 0 ? maxIndex : int.MaxValue;
 	}
 }
