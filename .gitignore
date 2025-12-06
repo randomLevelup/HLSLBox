@@ -3,6 +3,7 @@ Library/
 Logs/
 Temp/
 UserSettings/
+Builds/
 
 # VS
 *.code-workspace

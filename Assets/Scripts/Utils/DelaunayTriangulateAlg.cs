@@ -159,8 +159,8 @@ namespace HLSLBox.Algorithms
 
             DebugLog("==========================================\nStarting Delaunay triangulation...");
             var dPoints = new List<DelaunayPoint>(count);
-            DelaunayPoint pMinus1 = new(-1, Vector2.zero, DelaunayPoint.PointType.PMinus1);
-            DelaunayPoint pMinus2 = new(-2, Vector2.zero, DelaunayPoint.PointType.PMinus2);
+            DelaunayPoint pMinus1 = new(-1, new Vector2(1E12f, -1E12f), DelaunayPoint.PointType.PMinus1);
+            DelaunayPoint pMinus2 = new(-2, new Vector2(-1E12f, 1E12f), DelaunayPoint.PointType.PMinus2);
             DelaunayPoint? highest = null;
 
             Dag<DelaunayTriangle> trisDag = new(); // DAG of triangles
@@ -275,10 +275,12 @@ namespace HLSLBox.Algorithms
                 var jlkTri = new DelaunayTriangle(pj, pl, pk);
                 var iklTri = new DelaunayTriangle(pi, pk, pl);
 
-                DCEL.Face jlkFace = AddTriangleToDCEL(jlkTri);
-                DCEL.Face iklFace = AddTriangleToDCEL(iklTri);
+                // Update DCEL
                 DCEL.Face ijlFace = e.IncidentFace;
                 DCEL.Face jikFace = e.Twin.IncidentFace;
+
+                DCEL.Face jlkFace = AddTriangleToDCEL(jlkTri);
+                DCEL.Face iklFace = AddTriangleToDCEL(iklTri);
 
                 // Update DAG
                 if (ijlFace != null && faceToTriangle.TryGetValue(ijlFace, out var ijlTri))

@@ -346,7 +346,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5c465cc1a5c95af4fa7a241305388f63, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  particleCount: 25
+  particleCount: 24
   spawnArea: {x: 10, y: 10}
   particleMass: 9.15
   repulsionStrength: 8.3
