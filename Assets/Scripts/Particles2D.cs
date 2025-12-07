@@ -42,6 +42,7 @@ public class Particles2D : MonoBehaviour
     Vector2[] velocities;
     Vector2[] positionsUV; // cached normalized 0..1 for shader
     float[] noiseFactors;   // per-particle multiplier from CPU noise [~0..1], blended by influence
+    Color[] uploadColors;   // reused buffer to avoid GC every frame
 
     // Rendering
     Texture2D positionsTex; // RGHalf texture storing UV positions
@@ -116,6 +117,7 @@ public class Particles2D : MonoBehaviour
         velocities = new Vector2[particleCount];
         positionsUV = new Vector2[particleCount];
         noiseFactors = new float[particleCount];
+        EnsureUploadBuffer();
 
         var halfSpawn = spawnArea * 0.5f;
         for (int i = 0; i < particleCount; i++)
@@ -143,6 +145,15 @@ public class Particles2D : MonoBehaviour
                 filterMode = FilterMode.Point,
                 name = "Particles2D_Positions"
             };
+        }
+        EnsureUploadBuffer();
+    }
+
+    void EnsureUploadBuffer()
+    {
+        if (uploadColors == null || uploadColors.Length != particleCount)
+        {
+            uploadColors = new Color[particleCount];
         }
     }
 
@@ -358,13 +369,16 @@ public class Particles2D : MonoBehaviour
     void UploadPositionsToGPU()
     {
         if (positionsTex == null) return;
-        // Write UV positions as colors for WebGL compatibility
-        Color[] colors = new Color[particleCount];
+        EnsureUploadBuffer();
+        // Write UV positions as colors
         for (int i = 0; i < particleCount; i++)
         {
-            colors[i] = new Color(positionsUV[i].x, positionsUV[i].y, 0f, 0f);
+            uploadColors[i].r = positionsUV[i].x;
+            uploadColors[i].g = positionsUV[i].y;
+            uploadColors[i].b = 0f;
+            uploadColors[i].a = 0f;
         }
-        positionsTex.SetPixels(colors);
+        positionsTex.SetPixels(uploadColors);
         positionsTex.Apply(false, false);
     }
 

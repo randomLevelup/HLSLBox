@@ -24,12 +24,14 @@ public class Edge2D : MonoBehaviour
 	protected Texture2D edgesTex;
 	protected Texture2D virtualPositionsTex; // optional extra vertices (UV space)
 	protected int virtualVertexCount;
+	Color[] edgesUploadBuffer; // reused to avoid per-frame allocations
 	protected MaterialPropertyBlock mpb;
 	protected MeshRenderer mr;
 
 	// Runtime state
 	Coroutine edgeUpdater;
 	protected bool validateDirty;
+	int cachedEdgesHash;
 
 
 	void Awake()
@@ -117,7 +119,7 @@ public class Edge2D : MonoBehaviour
 
 	protected virtual IEnumerator UpdateEdgesLoop()
 	{
-		var wait = new WaitForSeconds(0.05f);
+		var wait = new WaitForSeconds(0.1f); // update 10 times per second
 		while (enabled)
 		{
 			UpdateEdges();
@@ -138,6 +140,7 @@ public class Edge2D : MonoBehaviour
 		{
 			edgesTex = CreateDataTexture(count, 1, "EdgesTex");
 		}
+		EnsureUploadBuffer(count);
 	}
 
 	protected virtual void Release()
@@ -157,27 +160,41 @@ public class Edge2D : MonoBehaviour
 		}
 		int maxIndex = GetMaxVertexIndex();
 		Algo2D.ClampEdges(edges, maxIndex);
-		Color[] colors = new Color[count];
+		int newHash = ComputeEdgesHash(edges, count);
+		if (cachedEdgesHash == newHash && edgesUploadBuffer != null)
+		{
+			return; // no changes; skip upload
+		}
+		EnsureUploadBuffer(count);
 		for (int i = 0; i < count; i++)
 		{
 			if (i < edges.Count)
 			{
-				colors[i] = new Color(edges[i].x, edges[i].y, 0f, 0f);
+				edgesUploadBuffer[i].r = edges[i].x;
+				edgesUploadBuffer[i].g = edges[i].y;
+				edgesUploadBuffer[i].b = 0f;
+				edgesUploadBuffer[i].a = 0f;
 			}
 			else
 			{
-				colors[i] = new Color(0f, 0f, 0f, 0f);
+				edgesUploadBuffer[i] = Color.clear;
 			}
 		}
-		edgesTex.SetPixels(colors);
+		edgesTex.SetPixels(edgesUploadBuffer);
 		edgesTex.Apply(false, false);
+		cachedEdgesHash = newHash;
 	}
 
 	protected Texture2D CreateDataTexture(int width, int height, string name)
 	{
 		width = Mathf.Max(1, width);
 		height = Mathf.Max(1, height);
-        var tex = new Texture2D(width, height, TextureFormat.RGFloat, false, true);
+	    var tex = new Texture2D(width, height, TextureFormat.RGFloat, false, true)
+		{
+			name = name,
+			wrapMode = TextureWrapMode.Clamp,
+			filterMode = FilterMode.Point
+		};
 		return tex;
 	}
 
@@ -218,6 +235,7 @@ public class Edge2D : MonoBehaviour
 		edges = edgeList ?? new List<Vector2Int>();
 		Algo2D.ClampEdges(edges, int.MaxValue);
 		validateDirty = true;
+		cachedEdgesHash = 0; // force next upload
 		if (Application.isPlaying)
 		{
 			EnsureTextures();
@@ -263,5 +281,29 @@ public class Edge2D : MonoBehaviour
 		int baseCount = particles != null ? particles.ParticleCount : 0;
 		int maxIndex = baseCount + Mathf.Max(0, virtualVertexCount) - 1;
 		return maxIndex >= 0 ? maxIndex : int.MaxValue;
+	}
+
+	void EnsureUploadBuffer(int count)
+	{
+		if (edgesUploadBuffer == null || edgesUploadBuffer.Length != count)
+		{
+			edgesUploadBuffer = new Color[count];
+		}
+	}
+
+	int ComputeEdgesHash(List<Vector2Int> list, int count)
+	{
+		unchecked
+		{
+			int h = count * 397;
+			int len = list?.Count ?? 0;
+			for (int i = 0; i < len; i++)
+			{
+				Vector2Int e = list[i];
+				h = h * 31 + e.x;
+				h = h * 31 + e.y;
+			}
+			return h;
+		}
 	}
 }

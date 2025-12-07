@@ -152,6 +152,7 @@ namespace HLSLBox.Algorithms
         public static async Task<List<Vector2Int>> DelaunayTriangulateIndices(Vector2[] positions, int count)
         {
             var dPoints = new List<DelaunayPoint>(count);
+            var pointByIdx = new Dictionary<int, DelaunayPoint>(count + 2); // O(1) lookups instead of List.Find
             DelaunayPoint pMinus1 = new(-1, new Vector2(1E12f, -1E12f), DelaunayPoint.PointType.PMinus1);
             DelaunayPoint pMinus2 = new(-2, new Vector2(-1E12f, 1E12f), DelaunayPoint.PointType.PMinus2);
             DelaunayPoint? highest = null;
@@ -239,9 +240,8 @@ namespace HLSLBox.Algorithms
                         return;
                 }
 
-                // TODO: Optimize point lookup
-                DelaunayPoint pl = dPoints.Find(dp => dp.Idx == pl_idx);
-                DelaunayPoint pk = dPoints.Find(dp => dp.Idx == pk_idx);
+                if (!pointByIdx.TryGetValue(pl_idx, out var pl) || !pointByIdx.TryGetValue(pk_idx, out var pk))
+                    throw new InvalidOperationException("Failed to look up point during edge legalization.");
 
                 // Is pk inside circumcircle of (pi, pj, pl)?
                 Vector2 a = pi.Position - pk.Position;
@@ -304,12 +304,16 @@ namespace HLSLBox.Algorithms
             // Build the point set
             for (int i = 0; i < count; i++)
             {
-                dPoints.Add(new DelaunayPoint(i, positions[i], DelaunayPoint.PointType.P));
+                var p = new DelaunayPoint(i, positions[i], DelaunayPoint.PointType.P);
+                dPoints.Add(p);
+                pointByIdx[i] = p;
             }
 
             // Add sentinel points
             dPoints.Add(pMinus1);
             dPoints.Add(pMinus2);
+            pointByIdx[pMinus1.Idx] = pMinus1;
+            pointByIdx[pMinus2.Idx] = pMinus2;
 
             // Find the highest point
             foreach (var dp in dPoints)
