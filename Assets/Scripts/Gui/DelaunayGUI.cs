@@ -49,6 +49,10 @@ public class DelaunayGUI : MonoBehaviour
 
         // Initialize cached values from Particles2D using reflection
         CacheParticleParameters();
+
+        // Position GUI in top right
+        windowRect.x = Screen.width * 0.74f;
+        windowRect.y = Screen.height * 0.04f;
     }
 
     void Update()

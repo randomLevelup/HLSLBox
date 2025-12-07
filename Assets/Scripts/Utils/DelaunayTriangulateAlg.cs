@@ -120,13 +120,18 @@ namespace HLSLBox.Algorithms
             public readonly DelaunayPoint A;
             public readonly DelaunayPoint B;
             public readonly DelaunayPoint C;
+
             public DelaunayTriangle(DelaunayPoint a, DelaunayPoint b, DelaunayPoint c) { A = a; B = b; C = c; }
+
             public bool Equals(DelaunayTriangle other)
                 => A.Equals(other.A) && B.Equals(other.B) && C.Equals(other.C);
+
             public override bool Equals(object obj)
                 => obj is DelaunayTriangle other && Equals(other);
+
             public override int GetHashCode()
                 => HashCode.Combine(A, B, C);
+
             public int Contains(DelaunayPoint px)
             {
                 int ab = DelaunayPoint.IsLeftOf(px, A, B);
@@ -146,18 +151,6 @@ namespace HLSLBox.Algorithms
 
         public static async Task<List<Vector2Int>> DelaunayTriangulateIndices(Vector2[] positions, int count)
         {
-            var debugLogBuilder = new StringBuilder();
-            void DebugLog(string message) => debugLogBuilder.AppendLine(message);
-            void FlushDebugLog()
-            {
-                if (debugLogBuilder.Length == 0)
-                    return;
-
-                Debug.Log(debugLogBuilder.ToString());
-                debugLogBuilder.Clear();
-            }
-
-            DebugLog("==========================================\nStarting Delaunay triangulation...");
             var dPoints = new List<DelaunayPoint>(count);
             DelaunayPoint pMinus1 = new(-1, new Vector2(1E12f, -1E12f), DelaunayPoint.PointType.PMinus1);
             DelaunayPoint pMinus2 = new(-2, new Vector2(-1E12f, 1E12f), DelaunayPoint.PointType.PMinus2);
@@ -170,7 +163,6 @@ namespace HLSLBox.Algorithms
             // Breadth-first search for a leaf triangle containing px
             DelaunayTriangle FindLeafContainingPoint(DelaunayPoint px)
             {
-                // Debug.log($"Finding leaf triangle containing point: {px.Idx}");
                 var queue = new Queue<DelaunayTriangle>();
                 var visited = new HashSet<DelaunayTriangle>();
                 queue.Enqueue(trisDag.Root);
@@ -183,10 +175,7 @@ namespace HLSLBox.Algorithms
 
                     // Reject triangles that do not contain the point
                     if (tri.Contains(px) < 0)
-                    {
-                        // Debug.log($"Triangle {tri} does not contain point: {px.Idx}");
                         continue;
-                    }
 
                     // This is the node we want
                     if (!trisDag.HasChildren(tri))
@@ -194,9 +183,7 @@ namespace HLSLBox.Algorithms
 
                     // Enqueue children
                     foreach (var child in trisDag.GetChildren(tri))
-                    {
                         queue.Enqueue(child);
-                    }
                 }
                 // Shouldn't reach here
                 throw new InvalidOperationException("Failed to find leaf triangle containing px");
@@ -225,7 +212,6 @@ namespace HLSLBox.Algorithms
 
             async Task LegalizeEdge(DelaunayPoint pi, DelaunayPoint pj)
             {
-                // Debug.log($"Legalizing edge: {pi.Idx} and {pj.Idx}");
                 // If {pi, pj} is part of the initial bounding triangle, it's always legal
                 if ((pi.Idx < 0 && pj.Idx < 0) ||
                     (pi.Idx < 0 && pj == highest.Value) ||
@@ -240,7 +226,7 @@ namespace HLSLBox.Algorithms
 
                 // If the edge is on the boundary (Twin has no adjacent triangle), we cannot legalize it.
                 if (e.Twin.Next == null)
-                    return;
+                    throw new InvalidOperationException("Failed to find twin edge during legalization.");
 
                 // Get the auxiliary points
                 int pl_idx = e.Next.Next.Origin;
@@ -261,6 +247,7 @@ namespace HLSLBox.Algorithms
                 Vector2 a = pi.Position - pk.Position;
                 Vector2 b = pj.Position - pk.Position;
                 Vector2 c = pl.Position - pk.Position;
+
                 // Test using determinant form
                 float det =   (a.x * a.x + a.y * a.y) * (b.x * c.y - b.y * c.x)
                             - (b.x * b.x + b.y * b.y) * (a.x * c.y - a.y * c.x)
@@ -271,7 +258,6 @@ namespace HLSLBox.Algorithms
 
                 // else, pk is inside circle ==> edge is illegal
                 // Flip (pi, pj) to edge (pl, pk) and recursively legalize
-                DebugLog($"Flipping edge ({pi.Idx}, {pj.Idx}) to ({pl.Idx}, {pk.Idx})");
                 var jlkTri = new DelaunayTriangle(pj, pl, pk);
                 var iklTri = new DelaunayTriangle(pi, pk, pl);
 
@@ -295,8 +281,7 @@ namespace HLSLBox.Algorithms
 
             async Task SubdivideFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
             {
-                // Debug.Log($"Subdividing face with point: {p.Idx} at position {p.Position}");
-                // add 3 triangles
+                // Add 3 triangles
                 DelaunayTriangle t1 = new DelaunayTriangle(tri.A, tri.B, p);
                 DelaunayTriangle t2 = new DelaunayTriangle(tri.B, tri.C, p);
                 DelaunayTriangle t3 = new DelaunayTriangle(tri.C, tri.A, p);
@@ -305,8 +290,6 @@ namespace HLSLBox.Algorithms
                 DCEL.Face f2 = AddTriangleToDCEL(t2);
                 DCEL.Face f3 = AddTriangleToDCEL(t3);
 
-                DebugLog($"Subdivided point {p.Idx} into triangles: {t1}, {t2}, {t3}");
-
                 // Update DAG
                 trisDag.AddChildren(tri, t1, t2, t3);
 
@@ -314,84 +297,6 @@ namespace HLSLBox.Algorithms
                 await LegalizeEdge(tri.A, tri.B);
                 await LegalizeEdge(tri.B, tri.C);
                 await LegalizeEdge(tri.C, tri.A);
-            }
-
-            async Task SubdivideDoubleFaceWithPoint(DelaunayTriangle tri, DelaunayPoint p)
-            {
-                DebugLog($"Degenerate case: double face at point: {p.Idx} at position {p.Position}");
-                
-                // Find which edge contains point p
-                DelaunayPoint a, b, c;
-                int abTest = DelaunayPoint.IsLeftOf(p, tri.A, tri.B);
-                int bcTest = DelaunayPoint.IsLeftOf(p, tri.B, tri.C);
-                int caTest = DelaunayPoint.IsLeftOf(p, tri.C, tri.A);
-
-                if (abTest == 0)
-                {
-                    // p is on edge AB
-                    a = tri.A;
-                    b = tri.B;
-                    c = tri.C;
-                }
-                else if (bcTest == 0)
-                {
-                    // p is on edge BC
-                    a = tri.B;
-                    b = tri.C;
-                    c = tri.A;
-                }
-                else // (caTest == 0)
-                {
-                    // p is on edge CA
-                    a = tri.C;
-                    b = tri.A;
-                    c = tri.B;
-                }
-
-                // Find the adjacent triangle sharing edge AB
-                trisDcel.TryGetEdge(a.Idx, b.Idx, out var edge);
-
-                // Get the third vertex X of the adjacent triangle
-                int xIdx;
-                try
-                {
-                    xIdx = edge.Twin.Next.Next.Origin;
-                }
-                catch (NullReferenceException ex)
-                {
-                    DebugLog($"Edge ({a.Idx}, {b.Idx}) has no adjacent triangle while handling degenerate face.");
-                    FlushDebugLog();
-                    throw new InvalidOperationException($"Edge ({a.Idx}, {b.Idx}) has no adjacent triangle", ex);
-                }
-
-                DelaunayPoint x = dPoints.Find(dp => dp.Idx == xIdx);
-
-                // Create four new triangles: APC, BPX, APX, BPC
-                DelaunayTriangle apc = new DelaunayTriangle(a, p, c);
-                DelaunayTriangle bpc = new DelaunayTriangle(b, p, c);
-                DelaunayTriangle apx = new DelaunayTriangle(a, p, x);
-                DelaunayTriangle bpx = new DelaunayTriangle(b, p, x);
-
-                // Add triangles to DCEL
-                DCEL.Face apcFace = AddTriangleToDCEL(apc);
-                DCEL.Face bpcFace = AddTriangleToDCEL(bpc);
-                DCEL.Face apxFace = AddTriangleToDCEL(apx);
-                DCEL.Face bpxFace = AddTriangleToDCEL(bpx);
-
-                // Update DAG - add the four new triangles as children of the original triangle
-                DCEL.Face abcFace = edge.IncidentFace;
-                DCEL.Face baxFace = edge.Twin.IncidentFace;
-
-                if (abcFace != null && faceToTriangle.TryGetValue(abcFace, out var abcTri))
-                    trisDag.AddChildren(abcTri, apc, bpc, apx, bpx);
-                if (baxFace != null && faceToTriangle.TryGetValue(baxFace, out var baxTri))
-                    trisDag.AddChildren(baxTri, apc, bpc, apx, bpx);
-
-                // Legalize edges opposite to p
-                await LegalizeEdge(a, x);
-                await LegalizeEdge(x, b);
-                await LegalizeEdge(b, c);
-                await LegalizeEdge(c, a);
             }
 
             /// ALGORITHM SETUP ///
@@ -420,7 +325,6 @@ namespace HLSLBox.Algorithms
                     highest = dp;
                 }
             }
-            // Debug.log($"Highest point has position {highest?.Position}");
 
             if (!highest.HasValue)
                 throw new InvalidOperationException("No valid points provided for triangulation");
@@ -447,10 +351,7 @@ namespace HLSLBox.Algorithms
 
                 // Find triangle containing pr
                 DelaunayTriangle currentTriangle = FindLeafContainingPoint(pr);
-                if (currentTriangle.Contains(pr) > 0)
-                    await SubdivideFaceWithPoint(currentTriangle, pr);
-                else
-                    await SubdivideDoubleFaceWithPoint(currentTriangle, pr);
+                await SubdivideFaceWithPoint(currentTriangle, pr);
             }
 
             // Convert DCEL faces of DAG leaves to edge list, filtering out sentinel edges
