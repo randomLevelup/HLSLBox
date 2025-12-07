@@ -11,12 +11,11 @@ public class Triangles : Edge2D
     protected override async void UpdateEdges()
     {
         if (particles == null) return;
-        var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
-        if (posBuffer == null || count <= 0) return;
+        if (count <= 0) return;
 
-        Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
-        try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+            Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
+            if (!particles.TryCopyPositionsUV(ref vtexPositionsUV)) return;
 
         List<Vector2Int> newEdges;
         try { newEdges = await DelaunayTriangulateAlg.DelaunayTriangulateIndices(vtexPositionsUV, count); }

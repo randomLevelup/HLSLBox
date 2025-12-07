@@ -14,14 +14,12 @@ public class Interx : Poly2D
     protected override void UpdateShape()
     {
         if (shapeA == null || shapeB == null || particles == null) return;
-
-        var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
-        if (posBuffer == null || count <= 0) return;
+        if (count <= 0) return;
 
         // Fetch current particle positions (UV space)
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
-        try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+        if (!particles.TryCopyPositionsUV(ref vtexPositionsUV)) return;
 
         // Build polygons for A and B in UV space
         var polyA = GatherPolygon(shapeA.indices, vtexPositionsUV);

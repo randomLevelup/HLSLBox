@@ -19,10 +19,7 @@ public class Poly2D : Edge2D
 	[SerializeField, Min(0f), Tooltip("Vertex radius in UV units (use ~0.005–0.02)")] float vertexRadiusUV = 0.01f;
 
 	// Polygon-only GPU data for vertex display
-	protected ComputeBuffer indicesBuffer; // int per vertex index
-	int[] indicesUploadScratch;
-
-	const int STRIDE_INT = sizeof(int);
+	protected Texture2D indicesTex; // stores vertex indices in R channel
 
 	// Build base edge pairs from our ordered indices
 	protected void RebuildEdgesFromIndices()
@@ -61,9 +58,10 @@ public class Poly2D : Edge2D
 	{
 		base.UpdateMaterial();
 		// After base sets common properties, attach polygon-specific buffers and props
-		if (indicesBuffer != null)
+		if (indicesTex != null)
 		{
-			mpb.SetBuffer("_PolyIndices", indicesBuffer);
+			mpb.SetTexture("_PolyIndicesTex", indicesTex);
+			mpb.SetVector("_PolyTexSize", new Vector4(indicesTex.width, indicesTex.height, 0f, 0f));
 		}
 		mpb.SetInt("_PolyCount", Mathf.Max(0, indices?.Count ?? 0));
 		mpb.SetInt("_PolyClosed", closed ? 1 : 0);
@@ -88,26 +86,40 @@ public class Poly2D : Edge2D
 	protected override void Release()
 	{
 		base.Release();
-		Algo2D.ReleaseComputeBuffer(ref indicesBuffer);
+		ReleaseTexture(ref indicesTex);
 	}
 
-	void EnsureIndicesBuffer()
+	void EnsureIndicesTexture()
 	{
 		int count = Mathf.Max(1, indices?.Count ?? 0);
-		Algo2D.EnsureComputeBuffer(ref indicesBuffer, count, STRIDE_INT);
+		if (indicesTex != null && indicesTex.width != count)
+		{
+			ReleaseTexture(ref indicesTex);
+		}
+		if (indicesTex == null)
+		{
+			indicesTex = CreateDataTexture(count, 1, "PolyIndicesTex");
+		}
 	}
 
 	void UploadIndices()
 	{
-		if (indicesBuffer == null) return;
+		if (indicesTex == null) return;
 		int n = Mathf.Max(1, indices?.Count ?? 0);
-		Algo2D.EnsureComputeBuffer(ref indicesBuffer, n, STRIDE_INT);
+		if (indicesTex.width != n)
+		{
+			EnsureIndicesTexture();
+		}
 		int maxIndex = GetMaxVertexIndex();
 		Algo2D.ClampIndices(indices, maxIndex);
-		Algo2D.EnsureArraySize(ref indicesUploadScratch, n);
-		Array.Clear(indicesUploadScratch, 0, n);
-		for (int i = 0; i < (indices?.Count ?? 0); i++) indicesUploadScratch[i] = indices[i];
-		indicesBuffer.SetData(indicesUploadScratch);
+		Color[] colors = new Color[n];
+		for (int i = 0; i < n; i++)
+		{
+			float idx = (indices != null && i < indices.Count) ? indices[i] : 0f;
+			colors[i] = new Color(idx, 0f, 0f, 0f);
+		}
+		indicesTex.SetPixels(colors);
+		indicesTex.Apply(false, false);
 	}
 
 	protected void TrimIndices()
@@ -122,7 +134,7 @@ public class Poly2D : Edge2D
 		RebuildEdgesFromIndices();
 		if (Application.isPlaying)
 		{
-			EnsureIndicesBuffer();
+			EnsureIndicesTexture();
 			UploadIndices();
 		}
 		// Ensure edges reflect current indices immediately
@@ -134,7 +146,7 @@ public class Poly2D : Edge2D
 		// Keep polygon index buffer in sync each frame during play/edit as needed
 		if (Application.isPlaying)
 		{
-			EnsureIndicesBuffer();
+			EnsureIndicesTexture();
 			UploadIndices();
 		}
 	}

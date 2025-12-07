@@ -472,9 +472,11 @@ namespace HLSLBox.Algorithms
         public static void ApplyParticlesToMaterial(MaterialPropertyBlock block, Particles2D particles)
         {
             if (block == null) return;
-            if (particles != null && particles.PositionsBuffer != null)
+            if (particles != null && particles.PositionsTexture != null)
             {
-                block.SetBuffer("_Positions", particles.PositionsBuffer);
+                block.SetTexture("_PositionsTex", particles.PositionsTexture);
+                Vector2Int texSize = particles.ParticleTexSize;
+                block.SetVector("_ParticleTexSize", new Vector4(texSize.x, texSize.y, 0f, 0f));
                 block.SetInt("_ParticleCount", particles.ParticleCount);
             }
             else

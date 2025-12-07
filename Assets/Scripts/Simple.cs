@@ -25,20 +25,19 @@ public class Simple : Poly2D
     protected override void UpdateShape()
     {
         if (particles == null) return;
-        var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
-        if (posBuffer == null || count <= 0) return;
+        if (count <= 0) return;
 
         if (!frozen && Time.time - startTime < hullWarmupSeconds)
         {
             // Compute convex hull for a brief warm-up
             Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
-            try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+            if (!particles.TryCopyPositionsUV(ref vtexPositionsUV)) return;
             var newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
             if (!Algo2D.SequenceEqual(indices, newIdx))
             {
                 indices = newIdx;
-                EnsureBuffer();
+                EnsureTextures();
                 Upload();
                 UpdateMaterial();
             }
@@ -54,7 +53,7 @@ public class Simple : Poly2D
         // Apply barrier impulses so vertices can't cross polygon segments
         // We only need the particle positions in UV to check crossings and compute impulses.
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
-        try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+        if (!particles.TryCopyPositionsUV(ref vtexPositionsUV)) return;
 
         // For each vertex in indices, push it away from any segment if it gets too close
         int m = indices.Count;
@@ -101,11 +100,10 @@ public class Simple : Poly2D
     {
         Debug.Log($"Re-Convexifying Simple polygon excluding {excludeIndices?.Count ?? 0} indices.");
         if (particles == null) return;
-        var posBuffer = particles.PositionsBuffer;
         int count = Mathf.Max(0, particles.ParticleCount);
-        if (posBuffer == null || count <= 0) return;
+        if (count <= 0) return;
         Algo2D.EnsureArraySize(ref vtexPositionsUV, count);
-        try { posBuffer.GetData(vtexPositionsUV); } catch (Exception) { return; }
+        if (!particles.TryCopyPositionsUV(ref vtexPositionsUV)) return;
         
         List<int> newIdx;
         if (excludeIndices != null && excludeIndices.Count > 0)
@@ -136,7 +134,7 @@ public class Simple : Poly2D
         else newIdx = Algo2D.ConvexHullIndices(vtexPositionsUV, count);
         
         indices = newIdx;
-        EnsureBuffer();
+        EnsureTextures();
         Upload();
         UpdateMaterial();
         if (excludeIndices == null || excludeIndices.Count == 0)

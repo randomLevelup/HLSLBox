@@ -5,6 +5,9 @@ Shader "Unlit/Particles2D_QuadDots"
 		_Color ("Color", Color) = (1,1,1,1)
 		_SoftEdge ("Soft Edge", Range(0,1)) = 0.35
 		_RadiusUV ("Radius UV", Vector) = (0.01, 0.01, 0, 0)
+		[HideInInspector]_PositionsTex ("Positions", 2D) = "black" {}
+		[HideInInspector]_ParticleTexSize ("Positions Tex Size", Vector) = (1,1,0,0)
+		[HideInInspector]_ParticleCount ("Particle Count", Int) = 0
 	}
 	SubShader
 	{
@@ -19,7 +22,7 @@ Shader "Unlit/Particles2D_QuadDots"
 			CGPROGRAM
 			#pragma vertex vert
 			#pragma fragment frag
-			#pragma target 4.5
+			#pragma target 3.0
 
 			#include "UnityCG.cginc"
 
@@ -35,7 +38,8 @@ Shader "Unlit/Particles2D_QuadDots"
 				float2 uv : TEXCOORD0;
 			};
 
-			StructuredBuffer<float2> _Positions;
+			sampler2D _PositionsTex;
+			float4 _ParticleTexSize; // xy = width, height
 			int _ParticleCount;
 			float2 _RadiusUV;
 			float _SoftEdge;
@@ -62,6 +66,13 @@ Shader "Unlit/Particles2D_QuadDots"
 				return a;
 			}
 
+			float2 SamplePosition(int idx)
+			{
+				float2 texSize = _ParticleTexSize.xy;
+				float2 uv = float2((idx + 0.5) / texSize.x, 0.5 / texSize.y);
+				return tex2D(_PositionsTex, uv).rg;
+			}
+
 			fixed4 frag (v2f i) : SV_Target
 			{
 				float2 uv = saturate(i.uv);
@@ -71,7 +82,7 @@ Shader "Unlit/Particles2D_QuadDots"
 				[loop]
 				for (int idx = 0; idx < _ParticleCount; idx++)
 				{
-					float2 c = _Positions[idx];
+					float2 c = SamplePosition(idx);
 					a += circle(uv, c, _RadiusUV);
 				}
 				// Prevent overbright - map to 0..1 with soft saturation

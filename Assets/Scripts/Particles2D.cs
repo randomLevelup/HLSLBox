@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using HLSLBox.Algorithms;
@@ -43,11 +44,9 @@ public class Particles2D : MonoBehaviour
     float[] noiseFactors;   // per-particle multiplier from CPU noise [~0..1], blended by influence
 
     // Rendering
-    ComputeBuffer positionsBuffer; // float2 per particle
+    Texture2D positionsTex; // RGHalf texture storing UV positions
     MaterialPropertyBlock mpb;
     MeshRenderer meshRenderer;
-
-    const int STRIDE_FLOAT2 = sizeof(float) * 2;
 
     void Awake()
     {
@@ -58,7 +57,7 @@ public class Particles2D : MonoBehaviour
         }
         mpb = new MaterialPropertyBlock();
         InitializeSimulation();
-        EnsureBuffer();
+        EnsureTexture();
         UploadPositionsToGPU();
         UpdateMaterialProperties();
     }
@@ -69,19 +68,19 @@ public class Particles2D : MonoBehaviour
         {
             InitializeSimulation();
         }
-        EnsureBuffer();
+        EnsureTexture();
         UploadPositionsToGPU();
         UpdateMaterialProperties();
     }
 
     void OnDisable()
     {
-        ReleaseBuffer();
+        ReleaseTexture();
     }
 
     void OnDestroy()
     {
-        ReleaseBuffer();
+        ReleaseTexture();
     }
 
     void OnValidate()
@@ -104,7 +103,7 @@ public class Particles2D : MonoBehaviour
             if (positions == null || positions.Length != particleCount)
             {
                 InitializeSimulation();
-                EnsureBuffer();
+                EnsureTexture();
             }
             UpdateMaterialProperties();
             UploadPositionsToGPU();
@@ -122,32 +121,38 @@ public class Particles2D : MonoBehaviour
         for (int i = 0; i < particleCount; i++)
         {
             // random position within spawn rect centered at origin (local space)
-            float x = Random.Range(-halfSpawn.x, halfSpawn.x);
-            float y = Random.Range(-halfSpawn.y, halfSpawn.y);
+            float x = UnityEngine.Random.Range(-halfSpawn.x, halfSpawn.x);
+            float y = UnityEngine.Random.Range(-halfSpawn.y, halfSpawn.y);
             positions[i] = new Vector2(x, y);
             velocities[i] = Vector2.zero;
         }
         NormalizePositionsToUV();
     }
 
-    void EnsureBuffer()
+    void EnsureTexture()
     {
-        if (positionsBuffer != null && positionsBuffer.count != particleCount)
+        if (positionsTex != null && positionsTex.width != particleCount)
         {
-            ReleaseBuffer();
+            ReleaseTexture();
         }
-        if (positionsBuffer == null)
+        if (positionsTex == null)
         {
-            positionsBuffer = new ComputeBuffer(particleCount, STRIDE_FLOAT2);
+            positionsTex = new Texture2D(particleCount, 1, TextureFormat.RGFloat, false, true)
+            {
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Point,
+                name = "Particles2D_Positions"
+            };
         }
     }
 
-    void ReleaseBuffer()
+    void ReleaseTexture()
     {
-        if (positionsBuffer != null)
+        if (positionsTex != null)
         {
-            positionsBuffer.Release();
-            positionsBuffer = null;
+            if (Application.isPlaying) Destroy(positionsTex);
+            else DestroyImmediate(positionsTex);
+            positionsTex = null;
         }
     }
 
@@ -352,16 +357,27 @@ public class Particles2D : MonoBehaviour
 
     void UploadPositionsToGPU()
     {
-        if (positionsBuffer == null) return;
-        positionsBuffer.SetData(positionsUV);
+        if (positionsTex == null) return;
+        // Write UV positions as colors for WebGL compatibility
+        Color[] colors = new Color[particleCount];
+        for (int i = 0; i < particleCount; i++)
+        {
+            colors[i] = new Color(positionsUV[i].x, positionsUV[i].y, 0f, 0f);
+        }
+        positionsTex.SetPixels(colors);
+        positionsTex.Apply(false, false);
     }
 
     void UpdateMaterialProperties()
     {
         if (meshRenderer == null) return;
         meshRenderer.GetPropertyBlock(mpb);
-        // Provide buffer and uniforms to shader
-        mpb.SetBuffer("_Positions", positionsBuffer);
+        // Provide texture and uniforms to shader
+        if (positionsTex != null)
+        {
+            mpb.SetTexture("_PositionsTex", positionsTex);
+            mpb.SetVector("_ParticleTexSize", new Vector4(positionsTex.width, positionsTex.height, 0f, 0f));
+        }
         mpb.SetInt("_ParticleCount", particleCount);
         // Radius in UV units per axis
         Vector2 radiusUV = new Vector2(particleRadius / bounds.x, particleRadius / bounds.y);
@@ -372,8 +388,21 @@ public class Particles2D : MonoBehaviour
     }
 
     // Public read-only accessors for other renderers (e.g., Poly2D)
-    public ComputeBuffer PositionsBuffer => positionsBuffer;
+    public Texture PositionsTexture => positionsTex;
+    public Vector2Int ParticleTexSize => positionsTex != null ? new Vector2Int(positionsTex.width, positionsTex.height) : new Vector2Int(1, 1);
     public int ParticleCount => particleCount;
+    public Vector2[] PositionsUV => positionsUV;
+
+    public bool TryCopyPositionsUV(ref Vector2[] dst)
+    {
+        if (positionsUV == null || positionsUV.Length != particleCount)
+        {
+            return false;
+        }
+        Algo2D.EnsureArraySize(ref dst, particleCount);
+        Array.Copy(positionsUV, dst, particleCount);
+        return true;
+    }
 
     // Apply a small velocity impulse specified in UV units; internally converted to local XY.
     public void AddVelocityImpulseUV(int index, Vector2 impulseUV)
